@@ -1,0 +1,98 @@
+appId: ${APP_ID}
+
+---
+- runFlow:
+    file: open-showcase.yaml
+- tapOn: 'Counter(, ›)?'
+- tapOn: 'Increment'
+- tapOn: 'Increment'
+- assertVisible: 'Count: 2'
+- tapOn: 'Decrement'
+- assertVisible: 'Count: 1'
+- tapOn: 'Reset'
+- assertVisible: 'Count: 0'
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: 'BackButton'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: 'Navigate up'
+- assertVisible: 'Shared examples'
+- assertNotVisible: 'Increment'
+- tapOn: 'Stopwatch(, ›)?'
+- tapOn: 'Start'
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: 'Stop'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          point: 63%, 30%
+- assertVisible: 'Start'
+- assertNotVisible: '00:00.00'
+- assertVisible: '\d\d:\d\d\.\d\d'
+- tapOn: 'Reset'
+- assertVisible: '00:00.00'
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          start: 1%, 50%
+          end: 90%, 50%
+          duration: 400
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- assertVisible: 'Shared examples'
+- tapOn: 'Todo(, ›)?'
+- tapOn: 'New todo'
+- inputText: 'Call Ada'
+- tapOn: 'Add'
+- extendedWaitUntil:
+    visible: 'Call Ada'
+    timeout: 5000
+- extendedWaitUntil:
+    visible: '1 active, 0 completed'
+    timeout: 5000
+- tapOn: 'New todo'
+- inputText: 'Water plants'
+- pressKey: ENTER
+- extendedWaitUntil:
+    visible: '2 active, 0 completed'
+    timeout: 5000
+- tapOn: 'Complete Call Ada'
+- extendedWaitUntil:
+    visible: '1 active, 1 completed'
+    timeout: 5000
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: 'BackButton'
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: 'Navigate up'
+- assertVisible: 'Shared examples'
+- tapOn: 'Form(, ›)?'
+- tapOn:
+    text: 'Email'
+    index: 1
+- inputText: 'not-an-email'
+- extendedWaitUntil:
+    visible: 'Please enter a valid email address'
+    timeout: 5000
