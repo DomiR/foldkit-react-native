@@ -1,0 +1,30 @@
+{
+  "name": "strict-showcase-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.1.0",
+    "counter-example": "workspace:*",
+    "effect": "4.1.0",
+    "foldkit": "workspace:*",
+    "form-example": "workspace:*",
+    "stopwatch-example": "workspace:*",
+    "todo-example": "workspace:*"
+  },
+  "devDependencies": {
+    "@foldkit/devtools": "workspace:*",
+    "@foldkit/vite-plugin": "workspace:*",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  },
+  "exports": {
+    "./showcase": "./src/showcase.ts",
+    "./showcaseStrictView": "./src/showcaseStrictView.ts"
+  }
+}
