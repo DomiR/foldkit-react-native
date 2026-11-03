@@ -76,6 +76,14 @@ export const foldkitAliases = (dirname: string) => ({
     dirname,
     '../../packages/foldkit/src/test/story',
   ),
+  'foldkit/strict/web': path.resolve(
+    dirname,
+    '../../packages/foldkit/src/strict/web',
+  ),
+  'foldkit/strict': path.resolve(
+    dirname,
+    '../../packages/foldkit/src/strict/public',
+  ),
   'foldkit/struct': path.resolve(dirname, '../../packages/foldkit/src/struct'),
   'foldkit/submodel': path.resolve(
     dirname,
