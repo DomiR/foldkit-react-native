@@ -123,6 +123,14 @@
       "types": "./dist/schema/public.d.ts",
       "import": "./dist/schema/public.js"
     },
+    "./strict": {
+      "types": "./dist/strict/public.d.ts",
+      "import": "./dist/strict/public.js"
+    },
+    "./strict/web": {
+      "types": "./dist/strict/web.d.ts",
+      "import": "./dist/strict/web.js"
+    },
     "./struct": {
       "types": "./dist/struct/public.d.ts",
       "import": "./dist/struct/public.js"

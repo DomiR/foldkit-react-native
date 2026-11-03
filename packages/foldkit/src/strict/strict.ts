@@ -1,0 +1,299 @@
+import { Schema } from 'effect'
+
+import type {
+  AnimatedStyleBinding,
+  AnimatedValueKey,
+  StrictLayoutAnimation,
+} from './animation.js'
+import type { StrictGesture } from './gesture.js'
+import type { StrictIcon } from './icon.js'
+
+/** Portable transforms applied in array order. Angles include their unit. @experimental */
+export const StrictTransform = Schema.Union([
+  Schema.Struct({ translateX: Schema.Number }),
+  Schema.Struct({ translateY: Schema.Number }),
+  Schema.Struct({ scale: Schema.Number }),
+  Schema.Struct({
+    rotate: Schema.Union([
+      Schema.TemplateLiteral([Schema.Number, 'deg']),
+      Schema.TemplateLiteral([Schema.Number, 'rad']),
+    ]),
+  }),
+])
+
+/** A portable transform operation. @experimental */
+export type StrictTransform = typeof StrictTransform.Type
+
+/** Properties accepted by strict CSS transitions. @experimental */
+export const TransitionProperty = Schema.Literals([
+  'all',
+  'width',
+  'height',
+  'minWidth',
+  'minHeight',
+  'maxWidth',
+  'maxHeight',
+  'padding',
+  'margin',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'gap',
+  'backgroundColor',
+  'color',
+  'opacity',
+  'borderWidth',
+  'borderColor',
+  'borderRadius',
+  'fontSize',
+  'lineHeight',
+  'letterSpacing',
+  'transform',
+])
+
+const Dimension = Schema.Union([
+  Schema.Number,
+  Schema.TemplateLiteral([Schema.Number, '%']),
+  Schema.Literal('auto'),
+])
+const Spacing = Schema.Union([
+  Schema.Number,
+  Schema.TemplateLiteral([Schema.Number, '%']),
+])
+
+/** Portable styles with React Native layout semantics. Numeric lengths use
+ * density-independent pixels, rendered as CSS pixels on the web.
+ * @experimental The portable style subset may change between releases. */
+export const StrictStyle = Schema.Struct({
+  transitionProperty: Schema.optionalKey(
+    Schema.Union([
+      TransitionProperty,
+      Schema.Literal('none'),
+      Schema.Array(TransitionProperty),
+    ]),
+  ),
+  transitionDuration: Schema.optionalKey(Schema.Number),
+  transitionDelay: Schema.optionalKey(Schema.Number),
+  transitionTimingFunction: Schema.optionalKey(
+    Schema.Literals(['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out']),
+  ),
+  transform: Schema.optionalKey(Schema.Array(StrictTransform)),
+  flex: Schema.optionalKey(Schema.Number),
+  flexDirection: Schema.optionalKey(
+    Schema.Literals(['row', 'column', 'row-reverse', 'column-reverse']),
+  ),
+  flexWrap: Schema.optionalKey(
+    Schema.Literals(['nowrap', 'wrap', 'wrap-reverse']),
+  ),
+  alignItems: Schema.optionalKey(
+    Schema.Literals([
+      'stretch',
+      'flex-start',
+      'flex-end',
+      'center',
+      'baseline',
+    ]),
+  ),
+  alignSelf: Schema.optionalKey(
+    Schema.Literals([
+      'auto',
+      'stretch',
+      'flex-start',
+      'flex-end',
+      'center',
+      'baseline',
+    ]),
+  ),
+  justifyContent: Schema.optionalKey(
+    Schema.Literals([
+      'flex-start',
+      'flex-end',
+      'center',
+      'space-between',
+      'space-around',
+      'space-evenly',
+    ]),
+  ),
+  gap: Schema.optionalKey(Schema.Number),
+  rowGap: Schema.optionalKey(Schema.Number),
+  columnGap: Schema.optionalKey(Schema.Number),
+  width: Schema.optionalKey(Dimension),
+  height: Schema.optionalKey(Dimension),
+  minWidth: Schema.optionalKey(Dimension),
+  minHeight: Schema.optionalKey(Dimension),
+  maxWidth: Schema.optionalKey(Dimension),
+  maxHeight: Schema.optionalKey(Dimension),
+  padding: Schema.optionalKey(Spacing),
+  paddingHorizontal: Schema.optionalKey(Spacing),
+  paddingVertical: Schema.optionalKey(Spacing),
+  paddingTop: Schema.optionalKey(Spacing),
+  paddingRight: Schema.optionalKey(Spacing),
+  paddingBottom: Schema.optionalKey(Spacing),
+  paddingLeft: Schema.optionalKey(Spacing),
+  margin: Schema.optionalKey(Dimension),
+  marginHorizontal: Schema.optionalKey(Dimension),
+  marginVertical: Schema.optionalKey(Dimension),
+  marginTop: Schema.optionalKey(Dimension),
+  marginRight: Schema.optionalKey(Dimension),
+  marginBottom: Schema.optionalKey(Dimension),
+  marginLeft: Schema.optionalKey(Dimension),
+  position: Schema.optionalKey(Schema.Literals(['relative', 'absolute'])),
+  top: Schema.optionalKey(Dimension),
+  right: Schema.optionalKey(Dimension),
+  bottom: Schema.optionalKey(Dimension),
+  left: Schema.optionalKey(Dimension),
+  zIndex: Schema.optionalKey(Schema.Number),
+  overflow: Schema.optionalKey(Schema.Literals(['visible', 'hidden'])),
+  backgroundColor: Schema.optionalKey(Schema.String),
+  color: Schema.optionalKey(Schema.String),
+  opacity: Schema.optionalKey(Schema.Number),
+  borderWidth: Schema.optionalKey(Schema.Number),
+  borderColor: Schema.optionalKey(Schema.String),
+  borderRadius: Schema.optionalKey(Schema.Number),
+  borderStyle: Schema.optionalKey(
+    Schema.Literals(['solid', 'dotted', 'dashed']),
+  ),
+  fontSize: Schema.optionalKey(Schema.Number),
+  fontWeight: Schema.optionalKey(
+    Schema.Literals([
+      'normal',
+      'bold',
+      '100',
+      '200',
+      '300',
+      '400',
+      '500',
+      '600',
+      '700',
+      '800',
+      '900',
+      100,
+      200,
+      300,
+      400,
+      500,
+      600,
+      700,
+      800,
+      900,
+    ]),
+  ),
+  fontStyle: Schema.optionalKey(Schema.Literals(['normal', 'italic'])),
+  lineHeight: Schema.optionalKey(Schema.Number),
+  letterSpacing: Schema.optionalKey(Schema.Number),
+  textAlign: Schema.optionalKey(
+    Schema.Literals(['auto', 'left', 'right', 'center', 'justify']),
+  ),
+  textDecorationLine: Schema.optionalKey(
+    Schema.Literals([
+      'none',
+      'underline',
+      'line-through',
+      'underline line-through',
+    ]),
+  ),
+})
+
+/** A readonly portable style record. @experimental */
+export type StrictStyle = typeof StrictStyle.Type
+
+/** Element names shared by strict web and native renderers. @experimental */
+export const StrictTag = Schema.Literals([
+  'div',
+  'span',
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'label',
+  'button',
+  'input',
+  'img',
+  'ul',
+  'li',
+])
+
+/** An element name supported by both hosts. @experimental */
+export type StrictTag = typeof StrictTag.Type
+
+type ElementBuilder<Node, Attribute> = (
+  attributes: ReadonlyArray<Attribute>,
+  children?: ReadonlyArray<Node | string | null>,
+) => Node
+
+/** A keyed screen description owned by a strict stack. @experimental */
+export type StrictScreen<Node, Attribute> = Readonly<{
+  key: string
+  attributes: ReadonlyArray<Attribute>
+  children: ReadonlyArray<Node | string | null>
+}>
+
+/** A keyed tab description owned by a strict tab container. @experimental */
+export type StrictTab<Node, Attribute> = StrictScreen<Node, Attribute>
+
+/** A host-neutral subset of HtmlBuilder. `Checked` selects a boolean input;
+ * `OnClick` records its toggle. `OnSubmitEditing` records Enter on a text input.
+ * @experimental The strict builder contract may change between releases. */
+export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
+  Record<StrictTag, ElementBuilder<Node, Attribute>>
+> &
+  Readonly<{
+    keyed: (
+      tag: StrictTag,
+    ) => (
+      key: string,
+      attributes: ReadonlyArray<Attribute>,
+      children?: ReadonlyArray<Node | string | null>,
+    ) => Node
+    stack: (
+      attributes: ReadonlyArray<Attribute>,
+      screens: ReadonlyArray<StrictScreen<Node, Attribute>>,
+    ) => Node
+    screen: (
+      key: string,
+      attributes: ReadonlyArray<Attribute>,
+      children?: ReadonlyArray<Node | string | null>,
+    ) => StrictScreen<Node, Attribute>
+    tabs: (
+      attributes: ReadonlyArray<Attribute>,
+      tabs: ReadonlyArray<StrictTab<Node, Attribute>>,
+    ) => Node
+    tab: (
+      key: string,
+      attributes: ReadonlyArray<Attribute>,
+      children?: ReadonlyArray<Node | string | null>,
+    ) => StrictTab<Node, Attribute>
+    Title: (title: string) => Attribute
+    TabIcon: (icon: StrictIcon) => Attribute
+    OnDismissed: (toMessage: (dismissedCount: number) => Message) => Attribute
+    SelectedTab: (key: string) => Attribute
+    OnSelectTab: (toMessage: (key: string) => Message) => Attribute
+    Gesture: (gesture: StrictGesture<Message>) => Attribute
+    OnTransitionEnd: (message: Message) => Attribute
+    Entering: (animation: StrictLayoutAnimation) => Attribute
+    Exiting: (animation: StrictLayoutAnimation) => Attribute
+    AnimatedStyle: (
+      key: AnimatedValueKey,
+      mapper: AnimatedStyleBinding['mapper'],
+    ) => Attribute
+    empty: Node
+    Style: (style: StrictStyle) => Attribute
+    OnClick: (message: Message) => Attribute
+    OnInput: (toMessage: (value: string) => Message) => Attribute
+    OnSubmitEditing: (message: Message) => Attribute
+    Value: (value: string) => Attribute
+    Placeholder: (value: string) => Attribute
+    Src: (value: string) => Attribute
+    Alt: (value: string) => Attribute
+    AriaLabel: (value: string) => Attribute
+    Disabled: (value: boolean) => Attribute
+    Checked: (value: boolean) => Attribute
+  }>
+
+/** One view that can render through any strict builder without host imports.
+ * @experimental The strict view contract may change between releases. */
+export type StrictView<Model, Message> = <Node, Attribute>(
+  model: Model,
+  h: StrictHtmlBuilder<Message, Node, Attribute>,
+) => Node
