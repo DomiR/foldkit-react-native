@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, Scope, pipe } from 'effect'
+import { Effect, Option, Predicate, Schema, Scope, pipe } from 'effect'
 
 import type { DevToolsStore } from '../devTools/store.js'
 import { type Visibility, isVisible } from './visibility.js'
@@ -97,11 +97,14 @@ const DEFAULT_DEV_TOOLS_SHOW: Visibility = 'Development'
 const DEFAULT_DEV_TOOLS_POSITION: DevToolsPosition = 'BottomRight'
 const DEFAULT_DEV_TOOLS_MODE: DevToolsMode = 'TimeTravel'
 
-const resolveDevToolsMode = (config: DevToolsModeConfig): DevToolsMode => {
-  if (typeof config === 'string') {
+const resolveDevToolsMode = (
+  config: DevToolsModeConfig,
+  isDevelopment: boolean,
+): DevToolsMode => {
+  if (Predicate.isString(config)) {
     return config
   } else {
-    return import.meta.hot ? config.development : config.production
+    return isDevelopment ? config.development : config.production
   }
 }
 const DEV_TOOLS_MAX_ENTRIES_MIN = 20
@@ -123,21 +126,21 @@ export type ResolvedDevToolsConfig = Readonly<{
  *  not stack a second panel over its host's. */
 export const resolveDevToolsConfig = (
   devTools: DevToolsConfig | undefined,
+  isDevelopment: boolean,
+  isDevToolsDevelopment: boolean,
 ): Option.Option<ResolvedDevToolsConfig> => {
-  const isInIframe = window.self !== window.top
-
   return pipe(
     devTools ?? {},
     Option.liftPredicate(config => config !== false),
     Option.filter(config =>
-      isVisible(
-        config.show ?? DEFAULT_DEV_TOOLS_SHOW,
-        !!import.meta.hot && !isInIframe,
-      ),
+      isVisible(config.show ?? DEFAULT_DEV_TOOLS_SHOW, isDevToolsDevelopment),
     ),
     Option.map(config => ({
       position: config.position ?? DEFAULT_DEV_TOOLS_POSITION,
-      mode: resolveDevToolsMode(config.mode ?? DEFAULT_DEV_TOOLS_MODE),
+      mode: resolveDevToolsMode(
+        config.mode ?? DEFAULT_DEV_TOOLS_MODE,
+        isDevelopment,
+      ),
       maybeBanner: Option.fromNullishOr(config.banner),
       maybeOverlay: Option.fromNullishOr(registeredDevToolsOverlay),
     })),

@@ -14,14 +14,12 @@ import { BrowserRuntime } from '@effect/platform-browser'
 
 import { buildIdOrInjected } from '../buildToken.js'
 import type { Ports } from '../port/index.js'
-import { provideBrowserScheduler } from './browserScheduler.js'
 import {
   type EmbedHandle,
   buildPortHandles,
   makeHostConnector,
 } from './hostConnector.js'
 import type { BootMode } from './hydrationHandoff.js'
-import { resolvePreservedModel } from './modelPreservationBridge.js'
 import { type MakeRuntimeReturn, runtimeInternals } from './runtime.js'
 
 /** Client-only startup input for an application that declares Flags. Pass it
@@ -122,18 +120,19 @@ const startProgram = (
   flags?: Effect.Effect<unknown, never, any>,
   buildId?: string,
 ): void => {
-  BrowserRuntime.runMain(
-    withUnhandledCauseReporting(
-      provideBrowserScheduler(
-        Effect.flatMap(
-          resolvePreservedModel(program.runtimeId),
-          preservedModel =>
+  const internals = runtimeInternals.get(program)
+  const startEffect =
+    internals === undefined
+      ? __startProgram(program, undefined, bootMode, flags, buildId)
+      : internals.provideScheduler(
+          Effect.flatMap(internals.resolvePreservedModel, preservedModel =>
             __startProgram(program, preservedModel, bootMode, flags, buildId),
-        ),
-      ),
-    ),
-    { disableErrorReporting: true },
-  )
+          ),
+        )
+
+  BrowserRuntime.runMain(withUnhandledCauseReporting(startEffect), {
+    disableErrorReporting: true,
+  })
 }
 
 /**
@@ -310,7 +309,7 @@ export function embed<P extends Ports | undefined = undefined>(
     previousTeardown === undefined
       ? Effect.void
       : Effect.promise(() => previousTeardown),
-    Effect.andThen(resolvePreservedModel(program.runtimeId)),
+    Effect.andThen(internals.resolvePreservedModel),
     Effect.flatMap(preservedModel =>
       isDisposed
         ? Effect.void
@@ -324,7 +323,7 @@ export function embed<P extends Ports | undefined = undefined>(
   )
 
   const fiber = Effect.runFork(
-    withUnhandledCauseReporting(provideBrowserScheduler(startEffect)),
+    withUnhandledCauseReporting(internals.provideScheduler(startEffect)),
   )
   embedLifecycle.maybeActiveFiber = Option.some(fiber)
 

@@ -69,6 +69,8 @@ const makeProgram = (onStart: (flags: unknown) => void) => {
   }
 
   runtimeInternals.set(program, {
+    resolvePreservedModel: Effect.succeed(undefined),
+    provideScheduler: effect => effect,
     startWith: (_maybeConnector, _preservedModel, _bootMode, flags) =>
       Effect.sync(() => onStart(flags)),
     startWithApplicationLayer: () => Effect.void,

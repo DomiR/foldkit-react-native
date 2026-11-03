@@ -5,7 +5,6 @@ import {
   Option,
   PubSub,
   Result,
-  Schema,
   Scope,
   Stream,
   SubscriptionRef,
@@ -18,10 +17,7 @@ import {
   type MountRecord,
   createDevToolsStore,
 } from '../devTools/store.js'
-import {
-  type PrepareDispatch,
-  startWebSocketBridge,
-} from '../devTools/webSocketBridge.js'
+import type { PrepareDispatch } from '../devTools/webSocketBridge.js'
 import {
   MountRuntime,
   MountTracker,
@@ -105,23 +101,37 @@ const toCommandRecord = ({ id, command }: RecordableCommand): CommandRecord =>
 /**
  * Builds the DevTools integration for one runtime from the `devTools`
  * config. `update` and `maybeFreezeModel` drive time-travel replay.
- * `prepareDispatch` admits decoded WebSocket input and captures the queue
- * guard that belongs to that exact admission. Installation retains its active
- * Scope for bridge finalizers.
+ * `prepareDispatch` admits decoded external input and captures the queue
+ * guard that belongs to that exact admission, and `connectStore` attaches the
+ * host's external DevTools transport. Installation retains its active Scope
+ * for bridge finalizers.
  */
 export const makeDevToolsIntegration = <Model, Message>({
   devTools,
   update,
   maybeFreezeModel,
   prepareDispatch,
+  isDevelopment,
+  isDevToolsDevelopment,
+  connectStore,
 }: Readonly<{
   devTools: RuntimeDevToolsConfig | undefined
   update: (model: Model, message: Message) => Readonly<{ model: Model }>
   maybeFreezeModel: (model: Model) => Model
+  isDevelopment: boolean
+  isDevToolsDevelopment: boolean
   prepareDispatch: PrepareDispatch
+  connectStore: (
+    store: DevToolsStore,
+    prepareDispatch: PrepareDispatch,
+  ) => Effect.Effect<void, never, Scope.Scope>
 }>): Effect.Effect<DevToolsIntegration<Model, Message>> =>
   Effect.gen(function* () {
-    const resolvedDevTools = resolveDevToolsConfig(devTools)
+    const resolvedDevTools = resolveDevToolsConfig(
+      devTools,
+      isDevelopment,
+      isDevToolsDevelopment,
+    )
     const excludeFromHistoryTags = resolveExcludeFromHistoryTags(devTools)
     const devToolsMaxEntries = resolveDevToolsMaxEntries(devTools)
     const devToolsKeyframeInterval = resolveDevToolsKeyframeInterval(devTools)
@@ -270,19 +280,10 @@ export const makeDevToolsIntegration = <Model, Message>({
               onSome: overlay => overlay(store, position, mode, maybeBanner),
             })
 
-            if (import.meta.hot) {
-              const maybeMessageSchema =
-                devTools !== undefined && devTools !== false
-                  ? Option.fromNullishOr(devTools.dispatchSchema)
-                  : Option.none<Schema.Codec<any, any, never, never>>()
-              const runtimeScope = yield* Effect.scope
-              yield* startWebSocketBridge(
-                store,
-                import.meta.hot,
-                maybeMessageSchema,
-                prepareExternalDispatch,
-              ).pipe(Effect.provideService(Scope.Scope, runtimeScope))
-            }
+            const runtimeScope = yield* Effect.scope
+            yield* connectStore(store, prepareExternalDispatch).pipe(
+              Effect.provideService(Scope.Scope, runtimeScope),
+            )
           }),
       })
 

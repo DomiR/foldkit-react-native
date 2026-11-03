@@ -1,6 +1,7 @@
 import { Effect, Fiber, Option, Result } from 'effect'
 import { expect, it } from 'vitest'
 
+import { makeBrowserDrainScheduler } from './browserDrainScheduler.js'
 import { makeMessageQueue } from './messageQueue.js'
 import { makeRuntimeStatus } from './runtimeStatus.js'
 
@@ -12,6 +13,7 @@ it('checks occurrence validity when buffered Messages reach update', async () =>
       Effect.gen(function* () {
         const queue = yield* makeMessageQueue<string>({
           status: makeRuntimeStatus(),
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: message => {
             processed.push(message)
           },
@@ -37,6 +39,7 @@ it('acknowledges only Messages processed after their queue guards run', async ()
         let isCurrent = true
         const queue = yield* makeMessageQueue<string>({
           status: makeRuntimeStatus(),
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: message => {
             processed.push(message)
           },
@@ -70,6 +73,7 @@ it('returns the target processing result after earlier buffered work', async () 
         let nextHistoryIndex = 0
         const queue = yield* makeMessageQueue<string, number>({
           status: makeRuntimeStatus(),
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: () => nextHistoryIndex++,
           crashWith: () => Effect.void,
         })
@@ -95,6 +99,7 @@ it('settles buffered receipts when the queue scope closes', async () => {
       Effect.gen(function* () {
         const queue = yield* makeMessageQueue<string>({
           status: makeRuntimeStatus(),
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: () => undefined,
           crashWith: () => Effect.void,
         })
@@ -119,6 +124,7 @@ it('settles boot-buffered receipts when a terminal crash drains the queue', asyn
         const status = makeRuntimeStatus()
         const queue = yield* makeMessageQueue<string>({
           status,
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: () => undefined,
           crashWith: () => Effect.void,
         })
@@ -142,6 +148,7 @@ it('settles active and remaining receipts when processing crashes', async () => 
       Effect.gen(function* () {
         const queue = yield* makeMessageQueue<string>({
           status: makeRuntimeStatus(),
+          makeDrainScheduler: makeBrowserDrainScheduler,
           processMessage: () => {
             throw new Error('update crashed')
           },

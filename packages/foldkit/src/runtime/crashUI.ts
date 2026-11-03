@@ -12,7 +12,6 @@ import {
 import { MountTracker } from '../mount/index.js'
 import { VNode, __patchVNode } from '../vdom.js'
 import { Dispatch } from './dispatch.js'
-import { applyDocumentMetadata } from './documentMetadata.js'
 
 /** Context provided to crash.view and crash.report when the runtime encounters
  *  an unrecoverable error. `message` is the Message being processed when the
@@ -268,7 +267,7 @@ export const renderCrashView = <Model, Message>(
   crash: CrashConfig<Model, Message> | undefined,
   container: HTMLElement,
   vnodeSlot: VNodeSlot,
-  manageDocument: boolean,
+  applyMetadata: (view: Document, root: Node | undefined) => void,
 ): void => {
   console.error('[foldkit] Application crash:', context.error)
 
@@ -304,9 +303,7 @@ export const renderCrashView = <Model, Message>(
       container,
     )
     vnodeSlot.maybeCurrentVNode = Option.some(patchedVNode)
-    if (manageDocument) {
-      applyDocumentMetadata(crashDocument, patchedVNode.elm)
-    }
+    applyMetadata(crashDocument, patchedVNode.elm)
   } catch (viewError) {
     console.error('[foldkit] crash.view failed:', viewError)
 
@@ -327,8 +324,6 @@ export const renderCrashView = <Model, Message>(
       container,
     )
     vnodeSlot.maybeCurrentVNode = Option.some(patchedVNode)
-    if (manageDocument) {
-      applyDocumentMetadata(fallbackDocument, patchedVNode.elm)
-    }
+    applyMetadata(fallbackDocument, patchedVNode.elm)
   }
 }

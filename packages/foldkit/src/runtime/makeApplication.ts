@@ -22,15 +22,11 @@ import type {
 } from '../update/index.js'
 import { Url, fromString as urlFromString } from '../url/index.js'
 import type { RoutingConfig } from './browserListeners.js'
+import { type RuntimeConfig, makeBrowserRuntime } from './browserRuntime.js'
 import type { CrashConfig } from './crashUI.js'
 import type { DevToolsConfig } from './devToolsConfig.js'
 import { resolveApplicationContainer } from './hostContainer.js'
-import {
-  type FlagsSchemaConfig,
-  type MakeRuntimeReturn,
-  type RuntimeConfig,
-  makeRuntime,
-} from './runtime.js'
+import { type FlagsSchemaConfig, type MakeRuntimeReturn } from './runtime.js'
 import type { SlowConfig } from './slowPhase.js'
 import type { ViewTransitionConfig } from './viewTransition.js'
 
@@ -694,7 +690,7 @@ export function makeApplication<
 
   /* eslint-disable @typescript-eslint/consistent-type-assertions */
   if (hasFlags && hasRouting) {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: config.Flags,
       configuredFlags: Option.none(),
@@ -719,7 +715,7 @@ export function makeApplication<
       'Application'
     >)
   } else if (hasRouting) {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: Schema.Void,
       configuredFlags: Option.none(),
@@ -743,7 +739,7 @@ export function makeApplication<
       'Application'
     >)
   } else if (hasFlags) {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: config.Flags,
       configuredFlags: Option.none(),
@@ -768,7 +764,7 @@ export function makeApplication<
       'Application'
     >)
   } else {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: Schema.Void,
       configuredFlags: Option.none(),

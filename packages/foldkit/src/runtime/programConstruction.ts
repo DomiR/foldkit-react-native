@@ -10,6 +10,7 @@ import {
 
 import type { AnyBlock } from '../block/definition.js'
 import type { Ports } from '../port/index.js'
+import { provideBrowserScheduler } from './browserScheduler.js'
 import { validatePorts } from './hostConnector.js'
 import {
   assertRuntimeId,
@@ -17,6 +18,7 @@ import {
   resolveElementContainer,
 } from './hostContainer.js'
 import { resolveHydrationHandoff } from './hydrationHandoff.js'
+import { resolvePreservedModel } from './modelPreservationBridge.js'
 import { type RootBlock, resolveProgramRoot } from './rootBlock.js'
 import { runtimeInternals } from './runtime.js'
 
@@ -221,6 +223,8 @@ export const makeConstructedProgram = (
     }
 
     runtimeInternals.set(program, {
+      resolvePreservedModel: resolvePreservedModel(runtimeId),
+      provideScheduler: provideBrowserScheduler,
       startWith,
       startWithApplicationLayer,
       applicationLayer: runtimeLayer,
