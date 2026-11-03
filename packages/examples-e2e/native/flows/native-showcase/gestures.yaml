@@ -1,0 +1,41 @@
+appId: ${APP_ID}
+
+---
+- runFlow:
+    file: open-showcase.yaml
+- tapOn: 'Gestures'
+- tapOn: 'Tap / hold / swipe / pan'
+- tapOn: 'Tap / hold / swipe / pan'
+- assertVisible: '2'
+- swipe:
+    start: 10%, 42%
+    end: 92%, 42%
+    duration: 150
+- extendedWaitUntil:
+    visible: 'Likes 1 · Dislikes 0'
+    timeout: 5000
+- swipe:
+    start: 92%, 42%
+    end: 10%, 42%
+    duration: 150
+- extendedWaitUntil:
+    visible: 'Likes 1 · Dislikes 1'
+    timeout: 5000
+- swipe:
+    from: 'Tap / hold / swipe / pan'
+    direction: RIGHT
+    duration: 3000
+- extendedWaitUntil:
+    visible: 'Translation: [1-9]\d*\.\d, -?\d+\.\d'
+    timeout: 5000
+- assertVisible: 'Likes 1 · Dislikes 1'
+- longPressOn: 'Tap / hold / swipe / pan'
+- extendedWaitUntil:
+    visible: '0'
+    timeout: 5000
+- extendedWaitUntil:
+    visible: 'Likes 0 · Dislikes 0'
+    timeout: 5000
+- extendedWaitUntil:
+    visible: 'No completed pan'
+    timeout: 5000

@@ -1,0 +1,41 @@
+appId: ${APP_ID}
+
+---
+- runFlow:
+    file: open-showcase.yaml
+- tapOn: 'Animations'
+- tapOn: 'Toggle box'
+- extendedWaitUntil:
+    visible: 'Completed property transitions: [1-9]\d*'
+    timeout: 5000
+- tapOn: 'Add item'
+- extendedWaitUntil:
+    visible: 'Item 2'
+    timeout: 5000
+- tapOn: 'Remove item 2'
+- extendedWaitUntil:
+    notVisible: 'Item 2'
+    timeout: 3000
+- scrollUntilVisible:
+    element: 'Drag this card'
+    centerElement: true
+- swipe:
+    start: 40%, 50%
+    end: 52%, 50%
+    duration: 2000
+- extendedWaitUntil:
+    visible: 'Flew out 0 · Sprang back 1'
+    timeout: 5000
+- swipe:
+    from: 'Drag this card'
+    direction: RIGHT
+    duration: 300
+- extendedWaitUntil:
+    visible: 'Flew out 1 · Sprang back 1'
+    timeout: 5000
+- scrollUntilVisible:
+    element: 'Count primes'
+- tapOn: 'Count primes'
+- extendedWaitUntil:
+    visible: '148[,. ]?933 primes · \d+ ms'
+    timeout: 120000
