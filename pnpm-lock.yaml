@@ -1272,6 +1272,43 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2(@opentelemetry/api@1.9.0)(@types/node@26.4.0)(@vitest/coverage-v8@5.0.2)(happy-dom@20.14.5)(jsdom@30.1.1(@noble/hashes@2.4.0))(vite@8.3.1(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.1))
 
+  examples/strict-showcase:
+    dependencies:
+      '@effect/platform-browser':
+        specifier: 4.1.0
+        version: 4.1.0(effect@4.1.0)
+      counter-example:
+        specifier: workspace:*
+        version: link:../counter
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      foldkit:
+        specifier: workspace:*
+        version: link:../../packages/foldkit
+      form-example:
+        specifier: workspace:*
+        version: link:../form
+      stopwatch-example:
+        specifier: workspace:*
+        version: link:../stopwatch
+      todo-example:
+        specifier: workspace:*
+        version: link:../todo
+    devDependencies:
+      '@foldkit/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
+      '@foldkit/vite-plugin':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin-foldkit
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vite:
+        specifier: ^8.3.1
+        version: 8.3.1(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.1)
+
   examples/todo:
     dependencies:
       '@effect/platform-browser':
