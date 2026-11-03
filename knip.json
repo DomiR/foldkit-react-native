@@ -88,6 +88,9 @@
     "examples/*": {
       "ignoreDependencies": ["@foldkit/devtools", "tailwindcss"]
     },
+    "examples/native-showcase": {
+      "entry": ["index.ts", "App.tsx", "babel.config.js", "metro.config.js"]
+    },
     "examples/charting": {
       "entry": [],
       "ignoreDependencies": ["@foldkit/devtools", "tailwindcss"]

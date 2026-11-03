@@ -27,6 +27,8 @@
     "routing-example",
     "route-transitions-example",
     "counter-example",
+    "@foldkit/native",
+    "native-showcase-example",
     "strict-showcase-example",
     "counters-example",
     "websocket-chat-example",

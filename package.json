@@ -55,6 +55,7 @@
     "dev:typing-game:server": "pnpm --filter @typing-game/server dev",
     "build:typing-game": "pnpm --filter '@typing-game/*' build",
     "dev:example:counter": "pnpm --filter counter-example dev",
+    "dev:example:native-showcase": "pnpm --filter native-showcase-example start",
     "dev:example:strict-showcase": "pnpm --filter strict-showcase-example dev",
     "dev:example:counters": "pnpm --filter counters-example dev",
     "dev:example:stopwatch": "pnpm --filter stopwatch-example dev",
