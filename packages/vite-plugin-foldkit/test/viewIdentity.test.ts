@@ -373,6 +373,44 @@ const view = () => 1
   })
 })
 
+describe('worklet directives', () => {
+  it('skips a worklet function while branding an outside function', () => {
+    const result = requireTransform(`const worklet = () => {
+  'worklet'
+  return 1
+}
+const outside = () => 2
+`)
+    expect(result.code).not.toContain('src/View.ts#worklet')
+    expect(result.code).toContain('src/View.ts#outside')
+  })
+
+  it('skips functions nested in a worklet while branding an outside function', () => {
+    const result = requireTransform(`const worklet = () => {
+  'worklet'
+  const nested = () => 1
+  return nested()
+}
+const outside = () => 2
+`)
+    expect(result.code).not.toContain('src/View.ts#worklet')
+    expect(result.code).not.toContain('src/View.ts#nested')
+    expect(result.code).toContain('src/View.ts#outside')
+  })
+
+  it('skips a module with a file-level worklet directive', () => {
+    expect(
+      transformViewIdentity(
+        `'worklet'
+const outside = () => 1
+`,
+        MODULE_ID,
+        ROOT,
+      ),
+    ).toBeNull()
+  })
+})
+
 describe('output stability', () => {
   it('produces identical output across runs', () => {
     const source = `const view = () => 1
