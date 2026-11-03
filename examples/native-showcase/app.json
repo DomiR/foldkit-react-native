@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Foldkit Native Showcase",
+    "slug": "foldkit-native-showcase",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": true
+    }
+  }
+}
