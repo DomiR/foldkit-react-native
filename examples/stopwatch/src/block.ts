@@ -147,7 +147,7 @@ export const EffectsLayer = Layer.mergeAll(
   subscriptions.layer,
 )
 
-const formatTime = (ms: number): string => {
+export const formatTime = (ms: number): string => {
   const minutes = pipe(Duration.millis(ms), Duration.toMinutes, floorAndPad)
 
   const seconds = pipe(
