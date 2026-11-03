@@ -1,6 +1,5 @@
 import {
   Array,
-  Duration,
   Effect,
   Exit,
   Fiber,
@@ -12,50 +11,32 @@ import {
   pipe,
 } from 'effect'
 
-import { DialogRuntime } from '../dom/dialogRuntime.js'
-import { releaseDialogResources } from '../dom/dom.js'
-import {
-  Document,
-  type HtmlBuilder,
-  __htmlBuilder as htmlBuilderFor,
-} from '../html/index.js'
 import type { ManagedResources } from '../managedResource/index.js'
 import type { Ports } from '../port/index.js'
 import { RenderCommit, createCommitNotifier } from '../render/commit.js'
 import type { Subscriptions } from '../subscription/subscription.js'
 import type { Return as UpdateReturn } from '../update/index.js'
-import { Url, fromString as urlFromString } from '../url/index.js'
-import {
-  type RoutingConfig,
-  addNavigationEventListeners,
-} from './browserListeners.js'
-import type { CrashConfig } from './crashUI.js'
+import type { Url } from '../url/index.js'
+import type { RoutingConfig } from './browserListeners.js'
 import { deepFreeze } from './deepFreeze.js'
 import type { DevToolsConfig } from './devToolsConfig.js'
 import { makeDevToolsIntegration } from './devToolsIntegration.js'
-import { createDuplicateIdScanner } from './duplicateIdScanner.js'
 import {
   type HostConnector,
   type PortChannelsBundle,
   makePortChannels,
   validatePorts,
 } from './hostConnector.js'
-import {
-  type BootMode,
-  type HydrationConfig,
-  resolveHydrationHandoff,
-} from './hydrationHandoff.js'
 import { forkManagedResourceFibers } from './managedResourceFibers.js'
 import { type MessageQueue, makeMessageQueue } from './messageQueue.js'
-import { preserveModel } from './modelPreservationBridge.js'
-import { makePreserveScheduler } from './preserveScheduler.js'
-import { type ResolvedViewTransition, makeRenderer } from './renderer.js'
+import type {
+  BootMode,
+  RuntimeCrashConfig,
+  RuntimeHost,
+  RuntimeRenderer,
+} from './platform.js'
 import { makeResourceProvider } from './resourceProvider.js'
 import { makeRuntimeStatus } from './runtimeStatus.js'
-import {
-  preserveScrollPosition,
-  restorePreservedScrollPosition,
-} from './scrollPreservation.js'
 import {
   type SlowConfig,
   type SlowUpdateContext,
@@ -64,10 +45,6 @@ import {
   reportSlowPhase,
 } from './slowPhase.js'
 import { forkSubscriptionFibers } from './subscriptionFibers.js'
-import {
-  type ViewTransitionConfig,
-  __resolveStartViewTransition,
-} from './viewTransition.js'
 import { type Visibility, isVisible } from './visibility.js'
 
 type AnyCommand<T, E = never, R = never> = {
@@ -76,16 +53,19 @@ type AnyCommand<T, E = never, R = never> = {
   readonly effect: Effect.Effect<T, E, R>
 }
 
-/** Full runtime configuration including Model Schema, Flags, init, update, view, and optional routing/stream config. */
-export type RuntimeConfig<
+/** Configuration for a runtime with platform-supplied rendering and services.
+ * @experimental The runtime platform contract may change between releases. */
+export type RuntimeCoreConfig<
   Model,
   Message,
-  Flags,
+  Flags = void,
   Resources = never,
   ManagedResourceServices = never,
   P extends Ports | undefined = undefined,
   Kind extends 'Application' | 'Element' = 'Application' | 'Element',
+  HostState = void,
 > = Readonly<{
+  runtimeId: string
   kind: Kind
   ports: P
   Model: Schema.Codec<Model, any, unknown, unknown>
@@ -100,125 +80,18 @@ export type RuntimeConfig<
     model: Model,
     message: Message,
   ) => UpdateReturn<Model, Message, Resources | ManagedResourceServices>
-  view: (model: Model, h: HtmlBuilder<Message>) => Document
-  /**
-   * Whether the runtime owns document-level state. When `true`, each render
-   * applies the view's `title`, `canonical`, and `og:url` to the document
-   * `<head>`. When `false`, the runtime is scoped to its container and never
-   * touches the `<head>`, so an app can be embedded at a node without
-   * clobbering the host page's metadata. `makeApplication` sets this to `true`;
-   * `makeElement` sets it to `false`.
-   */
-  manageDocument: boolean
+  renderer: RuntimeRenderer<Model, Message, HostState>
+  host: RuntimeHost<Message, HostState>
   subscriptions?: Subscriptions<
     Model,
     Message,
     Resources | ManagedResourceServices
   >
-  container: HTMLElement
-  /**
-   * Present when `makeApplication` found a server-rendered root stamped with
-   * `data-foldkit-app`. The first render then adopts that DOM in place
-   * instead of replacing it, and when the config declares Flags, `init` is
-   * fed the Schema-decoded Flags payload the server embedded, so both sides
-   * compute the same Model. Missing or undecodable handoff data is fatal.
-   * A Model restored after a development reload gets a fresh replace boot
-   * against the stamped root because the restored code may no longer match the
-   * served DOM.
-   */
-  hydration?: HydrationConfig
   routing?: RoutingConfig<Message>
-  crash?: CrashConfig<Model, Message>
+  crash?: RuntimeCrashConfig<Model, Message>
   slow?: SlowConfig<Model, Message>
-  /**
-   * Wraps qualifying renders in `document.startViewTransition` so the browser
-   * animates between the old and new DOM states. Return `false` for a plain
-   * render, `true` to transition, or `{ types }` to tag the transition for
-   * `:active-view-transition-type(...)` CSS scoping.
-   *
-   * The predicate runs after `update` and before the render it is deciding
-   * about, and receives both states: `context.previousModel` is the Model
-   * behind the DOM on screen, `context.model` is the one the render will
-   * paint. Comparing the two is how a predicate derives direction without the
-   * application keeping route history in its Model.
-   *
-   * Renders fall through to the plain path when the browser lacks the API,
-   * when `prefers-reduced-motion: reduce` is set, and during DevTools replay,
-   * crash, and initial renders.
-   *
-   * Defaults to `undefined`: no render is wrapped in a transition, and the
-   * runtime resolves nothing about the browser's support for them.
-   */
-  viewTransition?: ViewTransitionConfig<Model, Message>
-  /**
-   * Deep-freezes the Model after `init` and after every `update`, so accidental
-   * mutations (e.g. `model.items.push(...)`) throw a `TypeError` at the exact
-   * write site with a stack trace, rather than silently corrupting state or
-   * breaking reference-equality change detection.
-   *
-   * Defaults to `true`. Activates only under Vite's dev server, so production
-   * builds pay nothing. Pass `false` to disable.
-   *
-   * Scope: only the Model is frozen. Messages are short-lived and are not
-   * frozen.
-   */
   freezeModel?: boolean
-  /**
-   * Restores the window scroll position across Vite dev reloads. Every edit
-   * triggers a full page reload, which resets scroll to the top; this captures
-   * `window.scrollX`/`scrollY` just before the reload and reapplies it once the
-   * restored view has rendered, so editing a page you've scrolled deep into
-   * doesn't bounce you back to the top on every save.
-   *
-   * Defaults to `true`. Activates only under Vite's dev server and the
-   * runtime owns the document, so production builds and embedded `makeElement`
-   * apps (which do not own the page's scroll) pay nothing. Pass `false` to
-   * disable, for an app that drives its own scroll restoration.
-   *
-   * Scope: only the window scroll offset is preserved. Scroll positions of
-   * nested `overflow` containers are not.
-   */
-  preserveScroll?: boolean
-  /**
-   * An Effect Layer providing services shared by the fresh-boot Flags Effect
-   * and every Command and Subscription. The runtime builds the Layer once,
-   * the first time it is needed: at startup when a fresh boot supplies Flags
-   * (they resolve before `init`) or Subscriptions (their pipelines run for the
-   * application's lifetime), otherwise when the first Command runs. The
-   * built services are reused for the application's lifetime and released
-   * at runtime teardown.
-   *
-   * Put a service here when it is a genuine app-wide singleton: when
-   * construction is expensive relative to how often Commands need it (an
-   * RPC client rebuilt on every invocation), or when every Command must
-   * share one instance (an AudioContext whose oscillators feed one audio
-   * graph, an RTCPeerConnection). A Layer that fails to build crashes the
-   * app with the crash view: the runtime provides this Layer to every
-   * Command, so a service that cannot be constructed leaves no Command
-   * safe to run. The one exception is a Layer that fails while Flags are
-   * resolving and the Flags Effect needs it: that lands before the first
-   * render, where there is no Model to render a crash view against, so
-   * startup fails instead. Neither cause is swallowed, so a Flags Effect
-   * that fails for its own unrelated reason stays visible alongside the
-   * build error.
-   *
-   * Provide a service inside the Command's Effect instead when
-   * construction is cheap and stateless (an HTTP client via `foldkit/http`
-   * is a thin `fetch` wrapper), when different Commands want different
-   * implementations of the same tag (`KeyValueStore` over localStorage in
-   * one Command and sessionStorage in another), or when a service that can
-   * fail to construct should only take down the Commands that use it. An
-   * HTTP client can graduate here once many Commands share one configured
-   * client, but it starts per-Command.
-   */
   resources?: Layer.Layer<Resources>
-  /**
-   * Model-driven resources with acquire/release lifecycle. Unlike `resources`
-   * which persist for the application's lifetime, Managed Resources are
-   * acquired and released based on the current model state. Create with
-   * `ManagedResource.make`, compose child Submodels with `ManagedResource.lift`,
-   * and combine records with `ManagedResource.aggregate`.
-   */
   managedResources?: ManagedResources<Model, Message, ManagedResourceServices>
   devTools?: DevToolsConfig
 }>
@@ -258,6 +131,10 @@ export type MakeRuntimeReturn<
 }>
 
 type RuntimeInternals = {
+  resolvePreservedModel: Effect.Effect<unknown>
+  provideScheduler: <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>
   startWith: (
     maybeConnector: Option.Option<HostConnector>,
     preservedModel?: unknown,
@@ -272,6 +149,9 @@ type RuntimeInternals = {
 
 export const runtimeInternals = new WeakMap<object, RuntimeInternals>()
 
+/** Creates a platform-independent Foldkit runtime. Start its scoped Effect with
+ * `start`, and interrupt that fiber to release Commands, Subscriptions, and resources.
+ * @experimental The runtime platform contract may change between releases. */
 export const makeRuntime = <
   Model,
   Message,
@@ -280,6 +160,7 @@ export const makeRuntime = <
   ManagedResourceServices,
   P extends Ports | undefined,
   Kind extends 'Application' | 'Element',
+  HostState,
 >({
   ports,
   kind,
@@ -289,33 +170,29 @@ export const makeRuntime = <
   isFlagsRequired,
   init,
   update,
-  view,
-  manageDocument,
+  renderer,
+  host,
+  runtimeId,
   subscriptions,
-  container,
-  hydration,
   routing: routingConfig,
   crash,
   slow,
-  viewTransition,
   freezeModel,
-  preserveScroll,
   resources,
   managedResources,
   devTools,
-}: RuntimeConfig<
+}: RuntimeCoreConfig<
   Model,
   Message,
   Flags,
   Resources,
   ManagedResourceServices,
   P,
-  Kind
+  Kind,
+  HostState
 >): MakeRuntimeReturn<P, Flags, Resources, Kind> => {
   const isSlowVisible = (show: Visibility): boolean =>
-    isVisible(show, !!import.meta.hot)
-
-  const htmlBuilder = htmlBuilderFor<Message>()
+    isVisible(show, host.isDevelopment)
 
   const maybeResolvedSlow = __resolveSlowConfig(slow, isSlowVisible)
 
@@ -330,33 +207,7 @@ export const makeRuntime = <
     ({ subscriptionDependencies }) => subscriptionDependencies,
   )
 
-  // NOTE: detection sits inside the flatMap so it runs only for applications
-  // that configured the option. Resolved eagerly it would read
-  // `document.startViewTransition` and call `window.matchMedia` during
-  // `makeRuntime`, which otherwise touches no DOM global at construction.
-  const maybeResolvedViewTransition: Option.Option<
-    ResolvedViewTransition<Model, Message>
-  > = pipe(
-    Option.fromNullishOr(viewTransition),
-    Option.flatMap(decide =>
-      Option.map(__resolveStartViewTransition(), startViewTransition => ({
-        decide,
-        startViewTransition,
-        reducedMotionQuery: window.matchMedia(
-          '(prefers-reduced-motion: reduce)',
-        ),
-      })),
-    ),
-  )
-
-  const isFreezeModelActive = freezeModel !== false && !!import.meta.hot
-
-  const isPreserveScrollActive =
-    preserveScroll !== false && manageDocument && !!import.meta.hot
-
-  const duplicateIdScanner = import.meta.hot
-    ? createDuplicateIdScanner()
-    : undefined
+  const isFreezeModelActive = freezeModel !== false && host.isDevelopment
 
   const maybeFreezeModel = (model: Model): Model =>
     isFreezeModelActive ? deepFreeze(model) : model
@@ -364,11 +215,6 @@ export const makeRuntime = <
   if (Predicate.isNotUndefined(ports)) {
     validatePorts(ports)
   }
-
-  const runtimeId =
-    hydration !== undefined && hydration.runtimeId !== ''
-      ? hydration.runtimeId
-      : (container?.id ?? '')
 
   const startWith = (
     maybeConnector: Option.Option<HostConnector>,
@@ -382,19 +228,11 @@ export const makeRuntime = <
     // the same signal. A commit in one embedded application must never wake a
     // `Render.afterCommit` awaiting inside another.
     const commitNotifier = createCommitNotifier()
-    const dialogIds = new Set<string>()
+    const hostServices = host.makeRuntimeServices()
 
     return Effect.scoped(
       Effect.gen(function* () {
-        if (runtimeId === '') {
-          return yield* Effect.die(
-            new Error(
-              '[foldkit] Runtime container must have an `id` for Model preservation across reloads. ' +
-                'Set `container.id = "app"` (or any unique string) before passing it to makeApplication or makeElement. ' +
-                'On a server-rendered page the id comes from the `data-foldkit-app` root stamp instead.',
-            ),
-          )
-        }
+        yield* host.validateRuntime
 
         // NOTE: every perpetual fiber (for example, Subscription streams
         // and ManagedResource lifecycles) and every Command fiber forks
@@ -433,19 +271,16 @@ export const makeRuntime = <
             maybePortChannels,
           })
 
-        const { maybeHydrationRoot, resolveFlags } =
-          yield* resolveHydrationHandoff({
-            bootMode,
-            hydration,
-            bootFlags,
-            configuredFlags,
-            isFlagsRequired,
-            FlagsCodec,
-            preservedModel,
-            container,
-            buildId,
-            provideResources,
-          })
+        const { rendererState, resolveFlags } = yield* host.resolveBoot({
+          bootMode,
+          bootFlags,
+          configuredFlags,
+          isFlagsRequired,
+          FlagsCodec,
+          preservedModel,
+          buildId,
+          provideResources,
+        })
 
         const ModelJsonCodec = Schema.toCodecJson(
           /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
@@ -454,9 +289,10 @@ export const makeRuntime = <
         const decodePreservedModel = Schema.decodeUnknownExit(ModelJsonCodec)
         const encodePreservedModel = Schema.encodeUnknownSync(ModelJsonCodec)
 
-        const currentUrl: Option.Option<Url> = Option.fromNullishOr(
-          routingConfig,
-        ).pipe(Option.flatMap(() => urlFromString(window.location.href)))
+        const maybeCurrentUrl = Option.flatMap(
+          Option.fromNullishOr(routingConfig),
+          () => host.currentUrl(),
+        )
 
         type InitResult = ReturnType<typeof init>
 
@@ -469,7 +305,7 @@ export const makeRuntime = <
         // than it used to, and their release defects would bury its cause.
         const runInit: Effect.Effect<InitResult> = Effect.map(
           resolveFlags,
-          flags => init(flags, Option.getOrUndefined(currentUrl)),
+          flags => init(flags, Option.getOrUndefined(maybeCurrentUrl)),
         )
 
         const init_ = yield* preservedModel !== undefined
@@ -482,63 +318,8 @@ export const makeRuntime = <
         const initModelRaw = init_.model
         const initCommands = init_.commands ?? []
 
-        // NOTE: keep `encodePreservedModel` off the dispatch hot path. It walks
-        // the entire Model graph (O(modelSize) per call) and blocks input
-        // on large Models. The scheduler defers encoding to a quiet window
-        // and the `vite:beforeFullReload` flush covers the reload boundary.
-        const PRESERVE_DEBOUNCE = Duration.millis(200)
-        const preserveScheduler = yield* makePreserveScheduler<Model>(
-          {
-            onDebounce: model =>
-              Effect.sync(() =>
-                preserveModel(runtimeId, encodePreservedModel(model), false),
-              ),
-            onFlush: model =>
-              Effect.sync(() =>
-                preserveModel(runtimeId, encodePreservedModel(model), true),
-              ),
-          },
-          PRESERVE_DEBOUNCE,
-        )
-
-        const hot = import.meta.hot
-        if (hot) {
-          yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              // NOTE: Effect.runSync requires `flush` to have no async
-              // suspensions. The scheduler is built to satisfy that: flush
-              // clears pending atomically and runs `onFlush` without
-              // interrupting the in-flight timer fiber, which keeps the
-              // whole effect synchronous. If a future change adds an async
-              // step (interrupt-await, sleep, fork) on this path, Vite may
-              // race ahead to location.reload() before the encoded model
-              // reaches the plugin.
-              const handler = (): void => {
-                Effect.runSync(preserveScheduler.flush)
-              }
-              hot.on('vite:beforeFullReload', handler)
-              return handler
-            }),
-            handler =>
-              Effect.sync(() => hot.off('vite:beforeFullReload', handler)),
-          )
-          yield* Effect.addFinalizer(() => preserveScheduler.cancel)
-        }
-
-        if (hot && isPreserveScrollActive) {
-          yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              const handler = (): void => preserveScrollPosition(runtimeId)
-              hot.on('vite:beforeFullReload', handler)
-              return handler
-            }),
-            handler =>
-              Effect.sync(() => hot.off('vite:beforeFullReload', handler)),
-          )
-        }
-
-        const schedulePreserveModel = (model: Model): Effect.Effect<void> =>
-          hot ? preserveScheduler.schedule(model) : Effect.void
+        const schedulePreserveModel =
+          yield* host.makeModelPreserver(encodePreservedModel)
 
         const status = makeRuntimeStatus()
 
@@ -552,6 +333,7 @@ export const makeRuntime = <
         const messageQueue: MessageQueue<Message> =
           yield* makeMessageQueue<Message>({
             status,
+            makeDrainScheduler: host.makeDrainScheduler,
             processMessage: message => processMessagePlain(message),
             crashWith: (cause, maybeMessage) => crashWith(cause, maybeMessage),
           })
@@ -568,7 +350,10 @@ export const makeRuntime = <
           devTools,
           update,
           maybeFreezeModel,
-          enqueueMessageEffect,
+          isDevelopment: host.isDevelopment,
+          isDevToolsDevelopment: host.isDevToolsDevelopment(),
+          connectStore: store =>
+            host.connectDevTools(store, enqueueMessageEffect, devTools),
         })
         const {
           isRecordingCommands,
@@ -592,16 +377,10 @@ export const makeRuntime = <
             command,
           }))
 
-        if (import.meta.hot) {
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => duplicateIdScanner?.cancel()),
-          )
-        }
-
         if (routingConfig) {
           yield* Effect.acquireRelease(
             Effect.sync(() =>
-              addNavigationEventListeners(enqueueMessage, routingConfig),
+              host.addNavigationListeners(enqueueMessage, routingConfig),
             ),
             removeNavigationEventListeners =>
               Effect.sync(() => removeNavigationEventListeners()),
@@ -626,20 +405,14 @@ export const makeRuntime = <
           scheduleRenderFrame,
           skipPendingViewTransition,
           devToolsRenderBridge,
-        } = yield* makeRenderer<Model, Message>({
+        } = yield* renderer({
           status,
-          container,
-          view,
-          htmlBuilder,
-          manageDocument,
           crash,
           buildId,
           initModel,
-          maybeHydrationRoot,
+          hostState: rendererState,
           maybeSlowView,
           maybeSlowPatch,
-          duplicateIdScanner,
-          maybeResolvedViewTransition,
           commitNotifier,
           runtimeContext,
           readLiveModel: () => liveModel,
@@ -647,13 +420,7 @@ export const makeRuntime = <
           devToolsIntegration,
         })
 
-        yield* Effect.addFinalizer(() =>
-          Effect.forEach(
-            pipe(dialogIds, Array.fromIterable, Array.reverse),
-            releaseDialogResources,
-            { discard: true },
-          ),
-        )
+        yield* Effect.addFinalizer(() => hostServices.releaseRendererResources)
 
         // NOTE: the fork is deferred one microtask so a Command's Effect
         // never begins on the dispatching stack. Commands are facts from
@@ -743,7 +510,7 @@ export const makeRuntime = <
             liveModel = nextModel
             setLastDirtyMessage(message)
             PubSub.publishUnsafe(modelPubSub, nextModel)
-            if (import.meta.hot) {
+            if (host.isDevelopment) {
               Effect.runSync(schedulePreserveModel(nextModel))
             }
             scheduleRenderFrame()
@@ -795,9 +562,7 @@ export const makeRuntime = <
           return yield* Effect.never
         }
 
-        if (isPreserveScrollActive) {
-          yield* restorePreservedScrollPosition(runtimeId)
-        }
+        yield* host.afterInitialRender
 
         const initCommandInvocations = isRecordingCommands
           ? assignCommandIds(initCommands)
@@ -891,14 +656,7 @@ export const makeRuntime = <
       }),
     ).pipe(
       Effect.provideService(RenderCommit, commitNotifier.service),
-      Effect.provideService(DialogRuntime, {
-        register: id => {
-          dialogIds.add(id)
-        },
-        unregister: id => {
-          dialogIds.delete(id)
-        },
-      }),
+      hostServices.provideRuntime,
     )
   }
 
@@ -911,6 +669,8 @@ export const makeRuntime = <
     ports,
   }
   runtimeInternals.set(program, {
+    resolvePreservedModel: host.resolvePreservedModel,
+    provideScheduler: host.provideScheduler,
     startWith: (maybeConnector, preservedModel, bootMode, flags, buildId) =>
       startWith(maybeConnector, preservedModel, bootMode, flags, buildId),
     kind,

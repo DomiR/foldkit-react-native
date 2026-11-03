@@ -95,6 +95,10 @@
       "types": "./dist/runtime/public.d.ts",
       "import": "./dist/runtime/public.js"
     },
+    "./runtime-core": {
+      "types": "./dist/runtime-core/public.d.ts",
+      "import": "./dist/runtime-core/public.js"
+    },
     "./scene": {
       "types": "./dist/scene/public.d.ts",
       "import": "./dist/scene/public.js"

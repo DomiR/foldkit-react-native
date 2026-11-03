@@ -3,7 +3,6 @@ import {
   Effect,
   Option,
   PubSub,
-  Schema,
   type Scope,
   Stream,
   SubscriptionRef,
@@ -16,7 +15,6 @@ import {
   createDevToolsStore,
 } from '../devTools/store.js'
 import { extractSubmodelInfo, isTagged } from '../devTools/submodelPath.js'
-import { startWebSocketBridge } from '../devTools/webSocketBridge.js'
 import {
   MountRuntime,
   MountTracker,
@@ -100,22 +98,31 @@ const toCommandRecord = ({ id, command }: RecordableCommand): CommandRecord =>
 /**
  * Builds the DevTools integration for one runtime from the `devTools`
  * config. `update` and `maybeFreezeModel` drive time-travel replay, and
- * `enqueueMessageEffect` is how Messages sent over the WebSocket bridge
- * reach the queue.
+ * `connectStore` attaches the host's external DevTools transport.
  */
 export const makeDevToolsIntegration = <Model, Message>({
   devTools,
   update,
   maybeFreezeModel,
-  enqueueMessageEffect,
+  isDevelopment,
+  isDevToolsDevelopment,
+  connectStore,
 }: Readonly<{
   devTools: DevToolsConfig | undefined
   update: (model: Model, message: Message) => Readonly<{ model: Model }>
   maybeFreezeModel: (model: Model) => Model
-  enqueueMessageEffect: (message: Message) => Effect.Effect<void>
+  isDevelopment: boolean
+  isDevToolsDevelopment: boolean
+  connectStore: (
+    store: DevToolsStore,
+  ) => Effect.Effect<void, never, Scope.Scope>
 }>): Effect.Effect<DevToolsIntegration<Model, Message>> =>
   Effect.gen(function* () {
-    const resolvedDevTools = resolveDevToolsConfig(devTools)
+    const resolvedDevTools = resolveDevToolsConfig(
+      devTools,
+      isDevelopment,
+      isDevToolsDevelopment,
+    )
     const excludeFromHistoryTags = resolveExcludeFromHistoryTags(devTools)
     const devToolsMaxEntries = resolveDevToolsMaxEntries(devTools)
     const devToolsKeyframeInterval = resolveDevToolsKeyframeInterval(devTools)
@@ -248,20 +255,7 @@ export const makeDevToolsIntegration = <Model, Message>({
               onSome: overlay => overlay(store, position, mode, maybeBanner),
             })
 
-            if (import.meta.hot) {
-              const maybeMessageSchema =
-                devTools !== undefined && devTools !== false
-                  ? Option.fromNullishOr(devTools.Message)
-                  : Option.none<Schema.Codec<any, any, unknown, unknown>>()
-              yield* startWebSocketBridge(
-                store,
-                import.meta.hot,
-                /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-                message => enqueueMessageEffect(message as Message),
-                /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-                maybeMessageSchema as Option.Option<Schema.Codec<any, any>>,
-              )
-            }
+            yield* connectStore(store)
           }),
       })
 

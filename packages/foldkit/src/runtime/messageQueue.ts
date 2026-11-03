@@ -1,5 +1,6 @@
 import { Cause, Effect, Option, type Scope } from 'effect'
 
+import type { DrainScheduler } from './drainScheduler.js'
 import type { RuntimeStatus } from './runtimeStatus.js'
 
 const DRAIN_BUDGET_MS = 5
@@ -29,8 +30,10 @@ export const makeMessageQueue = <Message>({
   status,
   processMessage,
   crashWith,
+  makeDrainScheduler,
 }: Readonly<{
   status: RuntimeStatus
+  makeDrainScheduler: (drain: () => void) => DrainScheduler
   processMessage: (message: Message) => void
   crashWith: (
     cause: Cause.Cause<never>,
@@ -77,30 +80,18 @@ export const makeMessageQueue = <Message>({
     let syncWorkMsSinceYield = 0
     let lastDrainEndedAt = 0
     let isDrainDeferredToNextTask = false
-    let maybeDeferredDrainChannel: MessageChannel | null = null
+    const drainScheduler = makeDrainScheduler(() => {
+      isDrainDeferredToNextTask = false
+      syncWorkMsSinceYield = 0
+      drainPendingMessages()
+    })
 
     const scheduleDeferredDrain = (): void => {
-      if (maybeDeferredDrainChannel === null) {
-        maybeDeferredDrainChannel = new MessageChannel()
-        maybeDeferredDrainChannel.port2.onmessage = () => {
-          isDrainDeferredToNextTask = false
-          syncWorkMsSinceYield = 0
-          drainPendingMessages()
-        }
-      }
       isDrainDeferredToNextTask = true
-      maybeDeferredDrainChannel.port1.postMessage(null)
+      drainScheduler.schedule()
     }
 
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        if (maybeDeferredDrainChannel !== null) {
-          maybeDeferredDrainChannel.port1.close()
-          maybeDeferredDrainChannel.port2.close()
-          maybeDeferredDrainChannel = null
-        }
-      }),
-    )
+    yield* Effect.addFinalizer(() => Effect.sync(drainScheduler.dispose))
 
     const drainPendingMessages = (): void => {
       if (

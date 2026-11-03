@@ -5,10 +5,9 @@ import {
   FOLDKIT_APP_ATTRIBUTE,
   FOLDKIT_FLAGS_ATTRIBUTE,
 } from '../hydrationMarker.js'
+import type { BootMode } from './platform.js'
 
-/** Whether a boot adopts a server-rendered root (`Hydrate`) or builds the DOM
- *  fresh in the container (`Fresh`). */
-export type BootMode = 'Fresh' | 'Hydrate'
+export type { BootMode } from './platform.js'
 
 // NOTE: the payload scripts are held as elements, not as their text. Reading
 // the text is the first step of consuming another deployment's handoff, and the

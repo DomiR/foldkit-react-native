@@ -32,9 +32,9 @@ import type {
   DevToolsRenderBridge,
 } from './devToolsIntegration.js'
 import { Dispatch } from './dispatch.js'
-import { applyDocumentMetadata } from './documentMetadata.js'
 import type { DuplicateIdScanner } from './duplicateIdScanner.js'
 import type { MessageQueue } from './messageQueue.js'
+import type { RendererHandle } from './platform.js'
 import type { RuntimeStatus } from './runtimeStatus.js'
 import {
   type ResolvedSlowPhaseConfig,
@@ -80,20 +80,7 @@ type PendingViewTransition = Readonly<{
  * animating, and `devToolsRenderBridge` is what the DevTools store needs to
  * repaint during time travel.
  */
-export type Renderer<Model, Message> = Readonly<{
-  crashWith: (
-    cause: Cause.Cause<never>,
-    maybeMessage: Option.Option<Message>,
-  ) => Effect.Effect<void>
-  render: (
-    model: Model,
-    maybeMessage: Option.Option<Message>,
-  ) => Effect.Effect<void>
-  setLastDirtyMessage: (message: Message) => void
-  scheduleRenderFrame: () => void
-  skipPendingViewTransition: () => void
-  devToolsRenderBridge: DevToolsRenderBridge
-}>
+export type Renderer<Model, Message> = RendererHandle<Model, Message>
 
 /**
  * Builds the render side of one runtime: the current vnode and, when
@@ -112,7 +99,7 @@ export const makeRenderer = <Model, Message>({
   container,
   view,
   htmlBuilder,
-  manageDocument,
+  applyMetadata,
   crash,
   buildId,
   initModel,
@@ -131,7 +118,7 @@ export const makeRenderer = <Model, Message>({
   container: HTMLElement
   view: (model: Model, h: HtmlBuilder<Message>) => Document
   htmlBuilder: HtmlBuilder<Message>
-  manageDocument: boolean
+  applyMetadata: (view: Document, root: Node | undefined) => void
   crash: CrashConfig<Model, Message> | undefined
   buildId: string | undefined
   initModel: Model
@@ -329,7 +316,7 @@ export const makeRenderer = <Model, Message>({
           crash,
           container,
           vnodeSlot,
-          manageDocument,
+          applyMetadata,
         )
         settlePendingCommit()
       })
@@ -474,9 +461,7 @@ export const makeRenderer = <Model, Message>({
         }),
       )
 
-      if (manageDocument) {
-        applyDocumentMetadata(nextDocument, patchedVNode.elm)
-      }
+      applyMetadata(nextDocument, patchedVNode.elm)
 
       if (import.meta.hot) {
         duplicateIdScanner?.schedule(patchedVNode.elm)

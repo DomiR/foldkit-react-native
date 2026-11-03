@@ -5,6 +5,7 @@ import type { ManagedResources } from '../managedResource/index.js'
 import type { Ports } from '../port/index.js'
 import type { Subscriptions } from '../subscription/subscription.js'
 import type { Return as UpdateReturn } from '../update/index.js'
+import { type RuntimeConfig, makeBrowserRuntime } from './browserRuntime.js'
 import type {
   CrashConfig,
   CrashContext,
@@ -12,12 +13,7 @@ import type {
 } from './crashUI.js'
 import type { DevToolsConfig } from './devToolsConfig.js'
 import type { ApplicationInit } from './makeApplication.js'
-import {
-  type FlagsSchemaConfig,
-  type MakeRuntimeReturn,
-  type RuntimeConfig,
-  makeRuntime,
-} from './runtime.js'
+import { type FlagsSchemaConfig, type MakeRuntimeReturn } from './runtime.js'
 import type { SlowConfig } from './slowPhase.js'
 import type { ViewTransitionConfig } from './viewTransition.js'
 
@@ -236,7 +232,7 @@ export function makeElement<
 
   /* eslint-disable @typescript-eslint/consistent-type-assertions */
   if (hasFlags) {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: config.Flags,
       configuredFlags: Option.some(config.flags),
@@ -261,7 +257,7 @@ export function makeElement<
       'Element'
     >) as unknown as MakeRuntimeReturn<P, void, Resources, 'Element'>
   } else {
-    return makeRuntime({
+    return makeBrowserRuntime({
       ...baseConfig,
       Flags: Schema.Void,
       configuredFlags: Option.none(),
