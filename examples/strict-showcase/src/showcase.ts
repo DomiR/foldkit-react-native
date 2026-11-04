@@ -13,10 +13,17 @@ import * as Stopwatch from 'stopwatch-example/program'
 import * as Todo from 'todo-example/program'
 
 import * as Animations from './animations/program'
+import * as Contacts from './contacts/program'
 
 // MODEL
 
-export const Example = Schema.Literals(['Counter', 'Stopwatch', 'Todo', 'Form'])
+export const Example = Schema.Literals([
+  'Counter',
+  'Stopwatch',
+  'Todo',
+  'Form',
+  'Contacts',
+])
 export type Example = typeof Example.Type
 
 export const TabSelection = Schema.Literals([
@@ -32,6 +39,7 @@ export const ShowcaseRoute = defineTaggedUnion({
   Stopwatch: { id: Schema.Number },
   Todo: { id: Schema.Number },
   Form: { id: Schema.Number },
+  Contacts: { id: Schema.Number },
 })
 export type ShowcaseRoute = typeof ShowcaseRoute.Type
 
@@ -43,6 +51,7 @@ export const Model = Schema.Struct({
   stopwatch: Stopwatch.Model,
   todo: Todo.Model,
   form: Form.Model,
+  contacts: Contacts.Model,
   animations: Animations.Model,
   taps: Schema.Number,
   likes: Schema.Number,
@@ -65,6 +74,7 @@ export const Message = defineMessageUnion({
   GotStopwatchMessage: { message: Stopwatch.Message },
   GotTodoMessage: { message: Todo.Message },
   GotFormMessage: { message: Form.Message },
+  GotContactsMessage: { message: Contacts.Message },
   GotAnimationsMessage: { message: Animations.Message },
 })
 export type Message = typeof Message.Type
@@ -77,6 +87,9 @@ export const toGotTodoMessage = (message: Todo.Message): Message =>
   Message.GotTodoMessage({ message })
 export const toGotFormMessage = (message: Form.Message): Message =>
   Message.GotFormMessage({ message })
+
+export const toGotContactsMessage = (message: Contacts.Message): Message =>
+  Message.GotContactsMessage({ message })
 
 export const toGotAnimationsMessage = (message: Animations.Message): Message =>
   Message.GotAnimationsMessage({ message })
@@ -94,6 +107,7 @@ export const init = (flags: Todo.Flags): UpdateReturn => {
   const stopwatchInit = Stopwatch.init()
   const todoInit = Todo.init(flags)
   const formInit = Form.init()
+  const contactsInit = Contacts.init()
   const animationsInit = Animations.init()
 
   const commands = [
@@ -119,6 +133,7 @@ export const init = (flags: Todo.Flags): UpdateReturn => {
       stopwatch: stopwatchInit.model,
       todo: todoInit.model,
       form: formInit.model,
+      contacts: contactsInit.model,
       animations: animationsInit.model,
     }),
     commands,
@@ -154,6 +169,14 @@ const foldForm = Update.foldChild({
   toParentMessage: toGotFormMessage,
 })
 
+const foldContacts = Update.foldChild({
+  update: Contacts.update,
+  read: (model: Model) => Option.some(model.contacts),
+  write: (model, nextContacts) =>
+    modifyFields(model, { contacts: () => nextContacts }),
+  toParentMessage: toGotContactsMessage,
+})
+
 const foldAnimations = Update.foldChild({
   update: Animations.update,
   read: (model: Model) => Option.some(model.animations),
@@ -171,6 +194,7 @@ export const update = (model: Model, message: Message) =>
         Stopwatch: ShowcaseRoute.Stopwatch({ id }),
         Todo: ShowcaseRoute.Todo({ id }),
         Form: ShowcaseRoute.Form({ id }),
+        Contacts: ShowcaseRoute.Contacts({ id }),
       }
       const nextStack = Array.append(model.stack, routes[example])
 
@@ -220,6 +244,7 @@ export const update = (model: Model, message: Message) =>
     GotStopwatchMessage: ({ message }) => foldStopwatch(model, message),
     GotTodoMessage: ({ message }) => foldTodo(model, message),
     GotFormMessage: ({ message }) => foldForm(model, message),
+    GotContactsMessage: ({ message }) => foldContacts(model, message),
     GotAnimationsMessage: ({ message }) => foldAnimations(model, message),
   })
 
