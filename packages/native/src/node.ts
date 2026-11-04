@@ -1,3 +1,4 @@
+import type { Option } from 'effect'
 import type {
   StrictGesture,
   StrictIcon,
@@ -22,6 +23,7 @@ export type NativeAttributes<Message> = Readonly<{
   onDismissed?: (dismissedCount: number) => Message
   selectedTab?: string
   onSelectTab?: (key: string) => Message
+  isTabSelectionImmediate?: boolean
   gestures?: ReadonlyArray<StrictGesture<Message>>
   animatedStyles?: ReadonlyArray<AnimatedStyleBinding>
   entering?: StrictLayoutAnimation
@@ -31,6 +33,8 @@ export type NativeAttributes<Message> = Readonly<{
   onClick?: Message
   onInput?: (value: string) => Message
   onSubmitEditing?: Message
+  rows?: number
+  onEndReached?: Message
   value?: string
   placeholder?: string
   src?: string
@@ -38,6 +42,7 @@ export type NativeAttributes<Message> = Readonly<{
   ariaLabel?: string
   isDisabled?: boolean
   isChecked?: boolean
+  isStickyFooter?: boolean
 }>
 
 /** An attribute supplied to a native element builder. */
@@ -49,15 +54,29 @@ type NativeNodeIdentity = {
   identity?: string
 }
 
+/** A keyed row whose view is built when the native list renders it. */
+export type NativeListRow<Message> = Readonly<{
+  key: string
+  render: () => NativeNode<Message>
+}>
+
 /** A native element or an explicitly empty view. */
 export type NativeNode<Message> =
   | (Readonly<{
       _tag: 'Element'
       tag: NativeTag
-      inputRevision?: number
       key: string | undefined
       attributes: NativeAttributes<Message>
       children: ReadonlyArray<NativeChild<Message>>
+    }> &
+      NativeNodeIdentity)
+  | (Readonly<{
+      _tag: 'List'
+      key: string | undefined
+      attributes: NativeAttributes<Message>
+      rows: ReadonlyArray<NativeListRow<Message>>
+      itemHeight?: number
+      maintainVisibleContentPosition?: boolean
     }> &
       NativeNodeIdentity)
   | (Readonly<{
@@ -72,7 +91,22 @@ export type NativeNode<Message> =
       tabs: ReadonlyArray<NativeTab<Message>>
     }> &
       NativeNodeIdentity)
+  | Readonly<{
+      /** A node reused by `createStrictLazy` while its inputs are unchanged.
+       * The renderer skips the subtree while the same Lazy node is rendered. */
+      _tag: 'Lazy'
+      node: NativeNode<Message>
+      /** The node's first sticky footer and the rest of the node, computed
+       * once so a lifted footer and body keep stable references. */
+      liftStickyFooter: () => Option.Option<NativeFooterLift<Message>>
+    }>
   | Readonly<{ _tag: 'Empty' }>
+
+/** A sticky footer lifted out of a screen body, and the body without it. */
+export type NativeFooterLift<Message> = Readonly<{
+  footer: NativeNode<Message>
+  children: ReadonlyArray<NativeChild<Message>>
+}>
 
 /** An element, text, or an omitted child. */
 export type NativeChild<Message> = NativeNode<Message> | string | null

@@ -5,6 +5,7 @@ export type {
   NativeAttribute,
   NativeAttributes,
   NativeChild,
+  NativeListRow,
   NativeNode,
   NativeStyle,
   NativeScreen,
