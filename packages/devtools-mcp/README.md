@@ -49,23 +49,64 @@ Runtime.makeApplication({
 
 Restart your dev server, then restart your AI agent. The MCP server will appear with the `foldkit_*` tools attached.
 
-The browser bridge runs inside your app, so the MCP server only sees a Runtime while the app is open in a browser tab. Close the tab and the Runtime disappears from `foldkit_list_runtimes`.
+The bridge runs inside your app. The MCP server sees browser tabs and native apps while their DevTools bridges are connected. Closing a tab or disconnecting a native app removes its Runtime from `foldkit_list_runtimes`.
+
+## React Native
+
+Start the relay from the native app's project root and leave it running:
+
+```bash
+npx @foldkit/devtools-mcp relay
+```
+
+Opt the app in with the `devTools` option on `makeNativeProgram`. Pass its `Message` Schema to support dispatch:
+
+```typescript
+makeNativeProgram({
+  ...programConfig,
+  devTools: { name: 'My app', Message },
+})
+```
+
+See the [native package README](../native/README.md) for the complete configuration. Native DevTools are disabled by default and in release builds. Start the app in development, then call `foldkit_list_runtimes` from your MCP agent to find its connection id.
+
+The relay binds only to `127.0.0.1`, on port `9989` by default. The iOS simulator connects to `127.0.0.1`; the Android emulator uses `10.0.2.2`. These defaults are independent of Expo's bundle host. Physical iOS devices are unsupported.
+
+For Android through USB forwarding, run:
+
+```bash
+adb reverse tcp:9989 tcp:9989
+```
+
+Set `devTools.relayHost` to `'127.0.0.1'` in that app. The emulator default does not require this reverse rule.
+
+To select a project root or use another fixed port:
+
+```bash
+npx @foldkit/devtools-mcp relay --project-root ./apps/mobile --port 9990
+```
+
+Set the app's `devTools.relayPort` to the same port. An occupied port fails startup; the relay does not select another port. Use separate ports for relays serving different projects or worktrees. `--help` prints the command options. Ctrl-C stops the listener and removes its discovery record.
+
+Keep `FOLDKIT_DEVTOOLS_MCP_PORT` and `FOLDKIT_DEVTOOLS_MCP_HOST` unset in the MCP process. They select the legacy Vite endpoint and bypass discovery; they do not configure this relay. `FOLDKIT_PROJECT_ROOT` selects the agent's discovery root. If you override `FOLDKIT_DEVTOOLS_RELAY_DIRECTORY`, use the same private directory in the relay and MCP processes.
+
+Loopback binding and the native socket's Origin check form the native transport's trust boundary. Native upgrades accept an absent Origin, or exactly `http://<host>:<port>` or `ws://<host>:<port>`, with host `127.0.0.1`, `localhost`, or `10.0.2.2` and the listening port. Other origins, including `null`, multiple values, different ports, and lookalike hosts, are rejected. This blocks unrelated browser pages from announcing a native Runtime. Other local processes are inside the trust boundary. MCP clients authenticate through the private registry token and challenge handshake.
 
 ## Sensitive Runtime Data
 
 Treat this server as privileged access to the running application. A connected agent can read the current, initial, and retained historical Models; every retained Message payload; and the arguments passed to recorded Commands and Mounts. Anything returned by one of these tools enters the agent's context.
 
-Keep API keys, passwords, access and refresh tokens, authorization headers, session material, and private personal data out of those values. Long-lived secrets belong behind a server boundary, including in local demos. If the browser must temporarily carry a sensitive value, use Effect `Redacted` with a `Schema.Redacted` field configured with `disallowJsonEncode: true`. `Redacted` protects normal string, JSON, and inspection output; it does not encrypt the value or hide a browser-side credential from the person running the browser.
+Keep API keys, passwords, access and refresh tokens, authorization headers, session material, and private personal data out of those values. Long-lived secrets belong behind a server boundary, including in local demos. If the app must temporarily carry a sensitive value, use Effect `Redacted` with a `Schema.Redacted` field configured with `disallowJsonEncode: true`. `Redacted` protects normal string, JSON, and inspection output; it does not encrypt the value or hide a client-side credential from the person running the app.
 
-`excludeFromHistory` is for noisy Messages, not sensitive ones. The resulting Model remains inspectable. Omitting `DevToolsConfig.Message` disables dispatch only; read and replay tools remain available. Set `devToolsMcpPort: false` in the Foldkit Vite plugin options to keep the in-browser DevTools without starting the MCP relay, or set `devTools: false` in the application config to disable recording and the browser bridge too.
+`excludeFromHistory` is for noisy Messages, not sensitive ones. The resulting Model remains inspectable. Omitting `DevToolsConfig.Message` disables dispatch only; read and replay tools remain available. Set `devToolsMcpPort: false` in the Foldkit Vite plugin options to keep the in-browser DevTools without starting the MCP relay, or set `devTools: false` in the application config to disable recording and its bridge too. Native apps opt in through `makeNativeProgram`; stopping their standalone relay disconnects MCP access.
 
 ## Tools
 
-Every tool except `foldkit_list_runtimes` accepts an optional `runtime_id`. Without one, the tool uses the most recently connected Runtime of the most recently started dev server.
+Every tool except `foldkit_list_runtimes` accepts an optional `runtime_id`. Without one, the tool uses the most recently connected Runtime of the most recently started relay.
 
 | Tool                            | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `foldkit_list_runtimes`         | Returns metadata for every connected browser tab. Each tab carries the `projectRoot` of the dev server it belongs to, unless `FOLDKIT_DEVTOOLS_MCP_PORT` or `FOLDKIT_DEVTOOLS_MCP_HOST` is set. Agents call this first to discover which Runtime to target.                                                                                                                                                                                                                                               |
+| `foldkit_list_runtimes`         | Returns metadata for every connected browser tab and native app. Each Runtime carries the `projectRoot` of its relay, unless `FOLDKIT_DEVTOOLS_MCP_PORT` or `FOLDKIT_DEVTOOLS_MCP_HOST` is set. Agents call this first to discover which Runtime to target.                                                                                                                                                                                                                                               |
 | `foldkit_get_model`             | Snapshots the current Model. Accepts an optional `path` to narrow to a subtree and `expand` to control summarization.                                                                                                                                                                                                                                                                                                                                                                                     |
 | `foldkit_get_model_at`          | Snapshots a historical Model after a given history entry. Pass `index: N - 1` to read the Model just before Message `N`. Same `path`/`expand` semantics as `foldkit_get_model`. Indices outside the readable range (older entries are evicted past the rolling buffer) are rejected with the valid bounds. For the initial Model (and the init Commands and Mounts), use `foldkit_get_init`.                                                                                                              |
 | `foldkit_get_init`              | Reads the recorded initial Model, the Commands returned from the application's `init` function, and the Mounts that fired during the first render. Each Command and Mount carries its declared args. Equivalent to selecting the synthetic "init" row in the DevTools panel.                                                                                                                                                                                                                              |
@@ -99,36 +140,36 @@ High-frequency flows (drag-paint, scroll, keystroke) can fill the history buffer
 
 ## Architecture
 
-Three components cooperate:
+The Runtime bridge, relay, and MCP server cooperate across two transports:
 
-- **Browser bridge** (in `foldkit`): runs alongside DevTools, subscribes to the DevTools store, and exchanges typed frames over Vite's HMR WebSocket.
-- **Vite plugin relay** (in `@foldkit/vite-plugin`): gives each dev server its own loopback listener by default, publishes its address, and forwards traffic between browsers and MCP clients.
-- **MCP server** (this package): runs as a Node child process under your AI agent, connects to the plugin's relay over WebSocket, and exposes the typed tools over MCP's stdio transport.
+- **Runtime bridge** (in `foldkit`): subscribes to the DevTools store. Browser apps exchange typed frames over Vite's HMR WebSocket; `@foldkit/native` uses a reconnecting WebSocket to the native relay.
+- **Relay**: `@foldkit/vite-plugin` starts a loopback listener for each web dev server by default. This package's `relay` command starts a standalone loopback listener for native apps. Both publish authenticated discovery records and route requests by Runtime id.
+- **MCP server** (this package): runs as a Node child process under your AI agent, discovers both kinds of relay, and exposes the typed tools over MCP's stdio transport.
 
-Multiple browser tabs can be connected at once and each is addressable by its connection id. Tabs that close (gracefully or not) are pruned from the live Runtime list automatically.
+Multiple browser tabs and native apps can connect at once. Each has a connection id for targeting requests. Socket closure removes its Runtimes; the native relay also sends heartbeat pings to detect vanished emulators.
 
 ## Configuration
 
-An agent started at a workspace root can inspect every Foldkit app running under it. If no dev server runs under the agent's project root, the MCP server finds the nearest root that encloses it. This also lets an agent started in `src/` or through a symlink find the app. `foldkit_list_runtimes` lists the Runtimes from every matching dev server and includes each server's `projectRoot`.
+An agent started at a workspace root can inspect every Foldkit app running under it. If no relay runs under the agent's project root, the MCP server finds the nearest root that encloses it. This also lets an agent started in `src/` or through a symlink find the app. `foldkit_list_runtimes` lists the Runtimes from every matching relay and includes each relay's `projectRoot`.
 
-The MCP server connects when a tool is called. It checks the registry on every call, so the next call can reach a dev server that started or restarted after the agent.
+The MCP server connects when a tool is called. It checks the registry on every call, so the next call can reach a relay that started or restarted after the agent.
 
 | Environment variable               | What it changes                                                                                                                                                                                                                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `FOLDKIT_PROJECT_ROOT`             | Project to search. Defaults to the working directory.                                                                                                                                                                                                                                      |
-| `FOLDKIT_DEVTOOLS_MCP_PORT`        | Skips discovery and connects to this port. Set it to the `devToolsMcpPort` in your Vite config. When discovery finds no relay, set this variable to use a fixed port.                                                                                                                      |
+| `FOLDKIT_DEVTOOLS_MCP_PORT`        | Skips discovery and connects to the legacy Vite fixed-port endpoint. Set it to `devToolsMcpPort` in your Vite config. Leave it unset for native relays.                                                                                                                                    |
 | `FOLDKIT_DEVTOOLS_MCP_HOST`        | Skips discovery and connects to this host, on `FOLDKIT_DEVTOOLS_MCP_PORT` or `9988`. Set it when a `devToolsMcpPort` relay runs on another host.                                                                                                                                           |
 | `FOLDKIT_DEVTOOLS_RELAY_DIRECTORY` | Registry location. Defaults to a directory under `XDG_RUNTIME_DIR` when set, `~/.cache` on macOS and Linux, or the user temporary directory on Windows. Set it in both processes if they use different sandboxes. On Windows, it must be a direct child of the user's temporary directory. |
 
-An automatically discovered relay's registry record contains a random token. The MCP client uses it to sign a connection challenge and checks the relay's response before sending tool requests. The plugin refuses to publish the record if another user can read or replace the registry directory. The MCP server applies the same check before reading it. Both reject symlinks and junctions; on macOS they also check directory ACLs. Clients without access to the registry cannot connect, but the agent using this MCP server can inspect the Runtime data.
+An automatically discovered relay's registry record contains a random token. The MCP client uses it to sign a connection challenge and checks the relay's response before sending tool requests. Each relay refuses to publish its record if another user can read or replace the registry directory. The MCP server applies the same check before reading it. Both reject symlinks and junctions; on macOS they also check directory ACLs. Clients without access to the registry cannot connect, but the agent using this MCP server can inspect the Runtime data.
 
-On Windows, both processes use PowerShell to check the directory's owner, access list, ancestors, and reparse points. The registry must be a private direct child of the user's temporary directory. If the check cannot run or refuses the directory, configure `devToolsMcpPort` in Vite and set `FOLDKIT_DEVTOOLS_MCP_PORT` to the same port. A fixed port listens on every interface without a token. Do not use it on a shared or untrusted network.
+On Windows, both processes use PowerShell to check the directory's owner, access list, ancestors, and reparse points. The registry must be a private direct child of the user's temporary directory. If publication is refused, set `FOLDKIT_DEVTOOLS_RELAY_DIRECTORY` to a private, supported directory in both processes. Vite also offers a legacy fixed-port mode through `devToolsMcpPort` and `FOLDKIT_DEVTOOLS_MCP_PORT`. That Vite mode listens on every interface without a token and must not be used on a shared or untrusted network. The native relay always requires authenticated MCP access and binds only to loopback.
 
 ## Notes
 
-- The MCP bridge shares its lifecycle with Foldkit DevTools. If you set `devTools: false` in your program config, the bridge does not start and the Runtime is invisible to MCP. The default enables the bridge in dev.
-- Without `Message` in your `DevToolsConfig`, dispatch is rejected. The other (read-only) tools still work.
-- The relay only runs at dev time. Production builds never include the relay or the bridge, regardless of any `show` setting.
+- The MCP bridge shares its lifecycle with Foldkit DevTools. If you set `devTools: false` in your program config, the bridge does not start and the Runtime is invisible to MCP. Browser apps enable the bridge in development by default. Native apps must opt in and only enable it in development builds.
+- Without a `Message` Schema in the DevTools configuration, dispatch is rejected. Inspection and replay tools work without it.
+- Vite starts its relay during development. The native relay is a separate foreground process; native release builds disable their DevTools bridge.
 
 ## Documentation
 

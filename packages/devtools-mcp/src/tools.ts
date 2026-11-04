@@ -12,7 +12,7 @@ import {
 } from './relayClient.js'
 
 const RUNTIME_ID_DESCRIPTION =
-  'Optional connection id of a specific Foldkit runtime. Defaults to the most recently connected runtime of the most recently started dev server. Call `foldkit_list_runtimes` to find runtimes in other applications, each with its `projectRoot`.'
+  'Optional connection id of a specific Foldkit runtime. Defaults to the most recently connected runtime of the most recently started relay. Call `foldkit_list_runtimes` to find runtimes in other applications, each with its `projectRoot`.'
 
 const DEFAULT_LIST_MESSAGES_LIMIT = 50
 
@@ -436,7 +436,7 @@ export const buildTools = (
   {
     name: 'foldkit_get_message_schema',
     description:
-      'Describe the Message Schema for a Foldkit runtime so agents can construct valid payloads for `foldkit_dispatch_message`. Call with no arguments to receive a small variant index (every top-level variant\'s `_tag`, its payload field names, and which payload fields are themselves tagged-union shapes). Then call with `variant_tag: "ChosenVariant"` to drill in. The argument is a dot-separated path of variant `_tag` values: each segment names a variant, and the walker steps through the variant\'s single tagged-union payload field to reach the next. So `"GotMobileMenuDialogMessage"` narrows one level; `"GotMobileMenuDialogMessage.GotAnimationMessage"` narrows two levels of a Submodel chain. Discriminated unions deeper than the supplied path collapse to `{ "_summary": "union", "variants": [...] }` placeholders so the response stays compact even for deeply-nested apps; extend the path to drill further. `Schema.Option` fields render as `anyOf: [{_tag: "Some", value}, {_tag: "None"}]`. The full document follows the JSON Schema draft-2020-12 shape from `Schema.toJsonSchemaDocument`: `{ dialect, schema, definitions }`. Returns `maybeResult: None` when the runtime hasn\'t configured `DevToolsConfig.Message` (dispatch is also unavailable). Fields with no JSON representation, notably `Schema.instanceOf(File)` for user-uploaded files, render as `{type: "null"}`; those variants can\'t be dispatched via MCP because their values live in browser memory.',
+      'Describe the Message Schema for a Foldkit runtime so agents can construct valid payloads for `foldkit_dispatch_message`. Call with no arguments to receive a small variant index (every top-level variant\'s `_tag`, its payload field names, and which payload fields are themselves tagged-union shapes). Then call with `variant_tag: "ChosenVariant"` to drill in. The argument is a dot-separated path of variant `_tag` values: each segment names a variant, and the walker steps through the variant\'s single tagged-union payload field to reach the next. So `"GotMobileMenuDialogMessage"` narrows one level; `"GotMobileMenuDialogMessage.GotAnimationMessage"` narrows two levels of a Submodel chain. Discriminated unions deeper than the supplied path collapse to `{ "_summary": "union", "variants": [...] }` placeholders so the response stays compact even for deeply-nested apps; extend the path to drill further. `Schema.Option` fields render as `anyOf: [{_tag: "Some", value}, {_tag: "None"}]`. The full document follows the JSON Schema draft-2020-12 shape from `Schema.toJsonSchemaDocument`: `{ dialect, schema, definitions }`. Returns `maybeResult: None` when the runtime hasn\'t configured `DevToolsConfig.Message` (dispatch is also unavailable). Fields with no JSON representation, notably `Schema.instanceOf(File)` for user-uploaded files, render as `{type: "null"}`; those variants can\'t be dispatched via MCP because their values live in application memory.',
     inputSchema: toInputSchema(GetMessageSchemaInput),
     handle: runRuntimeTool(
       GetMessageSchemaInput,
@@ -471,7 +471,7 @@ export const buildTools = (
   {
     name: 'foldkit_list_runtimes',
     description:
-      'List Foldkit runtimes (browser tabs) connected to every Foldkit dev server under the project root, or else to every dev server at the nearest root that encloses the project root, oldest dev server first. Each runtime carries `projectRoot`, the root of the dev server it belongs to, unless the MCP server uses a fixed relay address.',
+      'List Foldkit runtimes (browser tabs and native apps) connected to every relay under the project root, or else to every relay at the nearest root that encloses the project root, oldest relay first. Each runtime carries `projectRoot`, the root of the relay it belongs to, unless the MCP server uses a fixed relay address.',
     inputSchema: NO_INPUT_SCHEMA,
     handle: () =>
       relayClient.listRuntimes.pipe(
