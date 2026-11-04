@@ -83,7 +83,10 @@ const bodyStyle: Record<string, string> = {
 
 /** Adapts a web HtmlBuilder to the portable strict subset. It applies native
  * layout defaults, resets controls, and converts numeric lengths to CSS pixels.
- * Entering uses CSS keyframes. Exiting does not delay web element removal.
+ * Portable transitions use CSS transitions and Entering uses CSS keyframes, both
+ * with reduced-motion support.
+ * Web animation Commands resolve at their target when reduced motion is active.
+ * Exiting does not delay web element removal.
  * @experimental The strict adapter contract may change between releases. */
 export const toStrictHtml = <Message>(
   h: HtmlBuilder<Message>,
@@ -124,10 +127,18 @@ export const toStrictHtml = <Message>(
     )
   const readTitle = (screen: StrictScreen<Html, Attribute<Message>>): string =>
     readNavigation(screen.attributes).title ?? screen.key
+  const readPortableStyle = (
+    attributes: ReadonlyArray<Attribute<Message>>,
+  ): StrictStyle =>
+    attributes.reduce<StrictStyle>(
+      (style, attribute) => ({ ...style, ...styleValues.get(attribute) }),
+      {},
+    )
 
   const attributesFor = (
     tag: StrictTag,
     attributes: ReadonlyArray<Attribute<Message>>,
+    portableStyle: StrictStyle,
   ): ReadonlyArray<Attribute<Message>> => {
     const isText =
       tag === 'span' ||
@@ -142,10 +153,6 @@ export const toStrictHtml = <Message>(
       ...(tag === 'span' ? { display: 'inline' } : {}),
     }
     const isControl = tag === 'button' || tag === 'input'
-    const portableStyle = attributes.reduce<StrictStyle>(
-      (style, attribute) => ({ ...style, ...styleValues.get(attribute) }),
-      {},
-    )
     const style = attributes.reduce<Record<string, string>>(
       (style, attribute) =>
         attribute._tag === 'Style' && !styleValues.has(attribute)
@@ -163,6 +170,9 @@ export const toStrictHtml = <Message>(
       controlAttributes.push(h.Type('button'))
     } else if (tag === 'input') {
       controlAttributes.push(h.Type(inputType))
+      if (isCheckbox) {
+        controlAttributes.push(h.Role('switch'))
+      }
     }
 
     return [
@@ -181,14 +191,21 @@ export const toStrictHtml = <Message>(
     children?: ReadonlyArray<Html | string | null>,
     key?: string,
   ): Html => {
-    const normalizedAttributes = attributesFor(tag, attributes)
+    const portableStyle = readPortableStyle(attributes)
+    const isTransitioned =
+      (portableStyle.transitionProperty !== undefined ||
+        portableStyle.transitionDuration !== undefined ||
+        portableStyle.transitionDelay !== undefined ||
+        portableStyle.transitionTimingFunction !== undefined) &&
+      portableStyle.transitionProperty !== 'none'
+    const normalizedAttributes = attributesFor(tag, attributes, portableStyle)
     const bindings = readNavigation(attributes)
     return renderStrictElement(
       h,
       tag,
       normalizedAttributes,
       children,
-      bindings,
+      { ...bindings, isTransitioned },
       animationHost,
       key,
     )
@@ -287,7 +304,12 @@ export const toStrictHtml = <Message>(
         onSome: tab =>
           builder.keyed('div')(
             tab.key,
-            [h.Style(bodyStyle), ...tab.attributes],
+            [
+              h.Role('tabpanel'),
+              h.AriaLabel(readTitle(tab)),
+              h.Style(bodyStyle),
+              ...tab.attributes,
+            ],
             tab.children,
           ),
       })
