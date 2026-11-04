@@ -28,7 +28,10 @@ import {
 } from './animationHost'
 import { type NativeBuilder, makeNativeBuilder } from './builder'
 import { makeNativeHost } from './host'
+import type { NativeInstrumentation } from './instrumentation'
 import type { NativeNode } from './node'
+
+declare const performance: Readonly<{ now: () => number }>
 
 type NativeAnimationServices = AnimatedValues | BackgroundRuntime
 
@@ -66,6 +69,8 @@ export type NativeProgramConfig<
   resources?: Layer.Layer<Resources>
   crash?: RuntimeCrashConfig<Model, Message>
   animationHost?: NativeAnimationHost
+  /** Opt-in timing hooks. When omitted, no timing code runs. */
+  instrumentation?: NativeInstrumentation
 }>
 
 /** A native node store driven by Foldkit's runtime core. `getModel` reads live
@@ -74,6 +79,8 @@ export type NativeProgram<Model, Message> = Readonly<{
   animationHost: NativeAnimationHost
   /** Advances the host's editing protocol for input adapters. @internal */
   recordInputEvent: () => number
+  /** @internal */
+  maybeInstrumentation: Option.Option<NativeInstrumentation>
   getModel: () => Model
   getSnapshot: () => NativeNode<Message>
   subscribe: (listener: () => void) => () => void
@@ -102,6 +109,17 @@ export const makeNativeProgram = <
 ): NativeProgram<Model, Message> => {
   let inputRevision = 0
   const h = makeNativeBuilder<Message>(() => inputRevision)
+  const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
+  const update = Option.match(maybeInstrumentation, {
+    onNone: () => config.update,
+    onSome: instrumentation => (model: Model, message: Message) => {
+      const startedAt = performance.now()
+      const result = config.update(model, message)
+      const endedAt = performance.now()
+      instrumentation.onUpdate(startedAt, endedAt)
+      return result
+    },
+  })
   const animationHost = config.animationHost ?? makeNativeAnimationHost()
   const resources = Layer.mergeAll(
     animationHost.layer,
@@ -123,6 +141,23 @@ export const makeNativeProgram = <
       listener()
     }
   }
+
+  const renderSync = Option.match(maybeInstrumentation, {
+    onNone:
+      () =>
+      (model: Model): void => {
+        publish(config.view(model, h))
+      },
+    onSome:
+      instrumentation =>
+      (model: Model): void => {
+        const startedAt = performance.now()
+        const node = config.view(model, h)
+        const endedAt = performance.now()
+        instrumentation.onView(startedAt, endedAt)
+        publish(node)
+      },
+  })
 
   const renderer: RuntimeRenderer<Model, Message> = context =>
     Effect.gen(function* () {
@@ -190,10 +225,6 @@ export const makeNativeProgram = <
           )
           settlePendingCommit()
         })
-
-      const renderSync = (model: Model): void => {
-        publish(config.view(model, h))
-      }
 
       const render = (model: Model): Effect.Effect<void> =>
         Effect.sync(() => {
@@ -284,7 +315,7 @@ export const makeNativeProgram = <
     configuredFlags: Option.none(),
     isFlagsRequired: false,
     init: config.init,
-    update: config.update,
+    update,
     ...(config.subscriptions && { subscriptions: config.subscriptions }),
     ...(config.managedResources && {
       managedResources: config.managedResources,
@@ -301,6 +332,7 @@ export const makeNativeProgram = <
   return {
     animationHost,
     recordInputEvent: () => ++inputRevision,
+    maybeInstrumentation,
     getModel: () =>
       Option.getOrThrowWith(
         maybeReadLiveModel,
