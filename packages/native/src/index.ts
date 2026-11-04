@@ -1,4 +1,5 @@
 export type { NativeBuilder } from './builder'
+export type { NativeDevToolsConfig } from './devTools'
 export { makeNativeBuilder } from './builder'
 export type {
   NativeAttribute,

@@ -7,8 +7,8 @@ import Animated from 'react-native-reanimated'
 
 import {
   NativeAnimatedElement,
-  toNativeStyle,
   type NativeMotion,
+  toNativeStyle,
 } from './animated'
 import { NativeAnimationContext } from './animationContext'
 import { NativeGestures } from './gestures'
@@ -468,6 +468,10 @@ const NativeRoot = <Model, Message>({
     program.subscribe,
     program.getSnapshot,
   )
+
+  React.useLayoutEffect(() => {
+    program.acknowledgeCommittedSnapshot(node)
+  }, [program, node])
 
   return renderRoot(node, program)
 }
