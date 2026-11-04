@@ -75,6 +75,18 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
             Editing: ({ id, text }) =>
               Option.liftPredicate(text, () => id === todo.id),
           })
+          const editButton = Option.match(maybeEditingText, {
+            onNone: () => ({
+              label: 'Edit',
+              ariaLabel: `Edit ${todo.text}`,
+              message: Message.StartedEditing({ id: todo.id }),
+            }),
+            onSome: () => ({
+              label: 'Save',
+              ariaLabel: `Save ${todo.text}`,
+              message: Message.SavedEdit(),
+            }),
+          })
 
           return h.keyed('li')(
             todo.id,
@@ -112,7 +124,6 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
                           ? 'line-through'
                           : 'none',
                       }),
-                      h.OnClick(Message.StartedEditing({ id: todo.id })),
                     ],
                     [todo.text],
                   ),
@@ -125,21 +136,14 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
                     h.OnSubmitEditing(Message.SavedEdit()),
                   ]),
               }),
-              Option.match(maybeEditingText, {
-                onNone: () =>
-                  h.button(
-                    [
-                      h.Style(buttonStyle),
-                      h.OnClick(Message.StartedEditing({ id: todo.id })),
-                    ],
-                    ['Edit'],
-                  ),
-                onSome: () =>
-                  h.button(
-                    [h.Style(buttonStyle), h.OnClick(Message.SavedEdit())],
-                    ['Save'],
-                  ),
-              }),
+              h.button(
+                [
+                  h.Style(buttonStyle),
+                  h.AriaLabel(editButton.ariaLabel),
+                  h.OnClick(editButton.message),
+                ],
+                [editButton.label],
+              ),
               Option.isSome(maybeEditingText)
                 ? h.button(
                     [h.Style(buttonStyle), h.OnClick(Message.CancelledEdit())],
