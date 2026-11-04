@@ -7,11 +7,13 @@ import { BrowserKeyValueStore } from '@effect/platform-browser'
 import {
   Message,
   Model,
+  animationHost,
   init,
+  routing,
   subscriptions,
   update,
   view,
-  animationHost,
+  webShowcaseNavigation,
 } from './main'
 
 const application = Runtime.makeApplication({
@@ -21,9 +23,11 @@ const application = Runtime.makeApplication({
   update,
   view,
   subscriptions,
-  resources: Layer.merge(
+  routing,
+  resources: Layer.mergeAll(
     BrowserKeyValueStore.layerLocalStorage,
     animationHost.layer,
+    webShowcaseNavigation,
   ),
   container: document.getElementById('root'),
   devTools: { Message },

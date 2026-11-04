@@ -15,5 +15,9 @@ export type { NativeInstrumentation } from './instrumentation'
 export type { NativeProgram, NativeProgramConfig } from './runtime'
 export { makeNativeProgram } from './runtime'
 
+export { deepLinkToUrl } from './deepLink'
+export { expoLinking } from './linking'
+export type { NativeLinking } from './linking'
+
 export { makeNativeAnimationHost } from './animationHost'
 export type { NativeAnimationHost } from './animationHost'

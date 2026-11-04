@@ -3,6 +3,7 @@
     "name": "Foldkit Native Showcase",
     "slug": "foldkit-native-showcase",
     "version": "1.0.0",
+    "scheme": "foldkit-showcase",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {

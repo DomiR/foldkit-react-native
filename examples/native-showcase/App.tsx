@@ -1,8 +1,10 @@
-import { Option } from 'effect'
+import { Layer, Option } from 'effect'
 import { KeyValueStore } from 'effect/persistence'
+import { nativeShowcaseNavigation } from 'strict-showcase-example/navigation'
 import {
   Model,
   init,
+  routing,
   subscriptions,
   update,
 } from 'strict-showcase-example/showcase'
@@ -36,11 +38,12 @@ if (Option.isSome(maybePerfHarness)) {
 
 const program = makeNativeProgram({
   Model,
-  init: () => init(Todo.Flags.make({ todos: Option.none() })),
+  init: url => init(Todo.Flags.make({ todos: Option.none() }), url),
   update,
   subscriptions,
   animationHost,
-  resources: KeyValueStore.layerMemory,
+  routing,
+  resources: Layer.merge(KeyValueStore.layerMemory, nativeShowcaseNavigation),
   view: showcaseStrictView,
   ...(Option.isNone(maybePerfHarness)
     ? {}
