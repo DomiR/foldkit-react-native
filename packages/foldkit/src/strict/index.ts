@@ -1,6 +1,7 @@
 export { StrictStyle, StrictTag } from './strict.js'
 export type {
   StrictHtmlBuilder,
+  StrictList,
   StrictView,
   StrictScreen,
   StrictTab,
