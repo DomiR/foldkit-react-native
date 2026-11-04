@@ -1,5 +1,14 @@
 #!/usr/bin/env node
-import { Cause, Console, Effect, HashMap, Layer, Logger, Option } from 'effect'
+import {
+  Array,
+  Cause,
+  Console,
+  Effect,
+  HashMap,
+  Layer,
+  Logger,
+  Option,
+} from 'effect'
 
 import * as NodeChildProcessSpawner from '@effect/platform-node/NodeChildProcessSpawner'
 import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
@@ -13,6 +22,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 
 import { runInit } from './install.js'
+import { startNativeRelay } from './nativeRelay.js'
+import {
+  NATIVE_RELAY_HELP,
+  NativeRelayOptions,
+  readNativeRelayOptions,
+} from './nativeRelayOptions.js'
 import { makeRelayClient } from './relayClient.js'
 import {
   configuredRelayUrl,
@@ -113,10 +128,45 @@ const main = Effect.gen(function* () {
   })
 })
 
-const subcommand = process.argv[2]
+const relayMain = Effect.gen(function* () {
+  const options = yield* readNativeRelayOptions(Array.drop(process.argv, 3))
+
+  yield* NativeRelayOptions.match(options, {
+    Help: () => Console.log(NATIVE_RELAY_HELP),
+    Start: options =>
+      Effect.gen(function* () {
+        const relay = yield* startNativeRelay(options)
+        return yield* relay.awaitFailure
+      }),
+  })
+})
+
+const subcommand = Option.getOrUndefined(Array.get(process.argv, 2))
 
 if (subcommand === 'init') {
   runInit()
+} else if (subcommand === 'relay') {
+  NodeRuntime.runMain(
+    relayMain.pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.provideMerge(
+          NodeChildProcessSpawner.layer,
+          Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
+        ),
+      ),
+      Effect.provideService(Logger.LogToStderr, true),
+      Effect.tapCause(cause =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.void
+          : Console.error(
+              '[foldkit-devtools-mcp] fatal error',
+              Cause.pretty(cause),
+            ),
+      ),
+    ),
+    { disableErrorReporting: true },
+  )
 } else {
   NodeRuntime.runMain(
     main.pipe(

@@ -37,9 +37,9 @@ const CONNECT_TIMEOUT = Duration.seconds(2)
 const LIST_RUNTIMES_TIMEOUT = Duration.seconds(2)
 
 const NOT_CONNECTED_REASON =
-  'Not connected to a Foldkit dev server. Start your Foldkit Vite dev server and retry the tool call.'
+  'Not connected to a Foldkit dev server. Start your Foldkit Vite dev server or native DevTools relay and retry the tool call.'
 const NO_RUNTIMES_REASON =
-  'No connected Foldkit runtimes. Open a Foldkit dev page and try again.'
+  'No connected Foldkit runtimes. Open a Foldkit dev page or a native app with DevTools enabled and try again.'
 const INVALID_ADDRESS_REASON = 'the relay address is not a valid URL'
 const UNVERIFIED_RELAY_REASON = 'the relay could not prove its identity'
 const CLOSED_REASON = 'The Foldkit relay client is closed.'

@@ -294,7 +294,7 @@ it(
 )
 
 it(
-  'asks for a dev page when a tool call finds no Runtime',
+  'asks for a dev page or native app when a tool call finds no Runtime',
   async () => {
     const application = applicationRoot('first')
     await startApplication(application)
@@ -305,7 +305,7 @@ it(
         keyframe_index: 1,
       }),
     ).toBe(
-      'Error: No connected Foldkit runtimes. Open a Foldkit dev page and try again.',
+      'Error: No connected Foldkit runtimes. Open a Foldkit dev page or a native app with DevTools enabled and try again.',
     )
   },
   TEST_TIMEOUT,
