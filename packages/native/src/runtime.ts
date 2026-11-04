@@ -28,6 +28,11 @@ import {
 } from './animationHost'
 import { type NativeBuilder, makeNativeBuilder } from './builder'
 import { makeNativeHost } from './host'
+import {
+  isDevelopment,
+  registerProgram,
+  takeOverProgram,
+} from './modelPreservation'
 import type { NativeNode } from './node'
 
 type NativeAnimationServices = AnimatedValues | BackgroundRuntime
@@ -39,8 +44,10 @@ export type NativeProgramConfig<
   Resources = never,
   ManagedResourceServices = never,
 > = Readonly<{
-  /** Omit the Schema for an opaque in-memory Model. */
-  Model?: Schema.Codec<Model, any, unknown, unknown>
+  /** Omit the Schema for an opaque in-memory Model. Development Fast Refresh
+   * encodes and decodes the Model synchronously, so the Schema must require
+   * no decoding or encoding services. */
+  Model?: Schema.Codec<Model, any, never, never>
   init: () => Update.Return<
     Model,
     Message,
@@ -65,6 +72,11 @@ export type NativeProgramConfig<
   managedResources?: ManagedResources<Model, Message, ManagedResourceServices>
   resources?: Layer.Layer<Resources>
   crash?: RuntimeCrashConfig<Model, Message>
+  /** Identifies the program across Fast Refresh in development. Defaults to
+   * `main`. Programs alive at the same time need distinct ids. The replaced
+   * program is interrupted asynchronously, so its Subscription and
+   * ManagedResource finalizers can run after the new program has started. */
+  id?: string
   animationHost?: NativeAnimationHost
 }>
 
@@ -102,7 +114,13 @@ export const makeNativeProgram = <
 ): NativeProgram<Model, Message> => {
   let inputRevision = 0
   const h = makeNativeBuilder<Message>(() => inputRevision)
+  const id = config.id ?? 'main'
   const animationHost = config.animationHost ?? makeNativeAnimationHost()
+  const maybeModelPreservation = isDevelopment()
+    ? Option.map(Option.fromNullishOr(config.Model), modelSchema => ({
+        encodeModel: Schema.encodeUnknownSync(Schema.toCodecJson(modelSchema)),
+      }))
+    : Option.none<Readonly<{ encodeModel: (model: Model) => unknown }>>()
   const resources = Layer.mergeAll(
     animationHost.layer,
     ...Array.fromOption(Option.fromNullishOr(config.resources)),
@@ -295,10 +313,16 @@ export const makeNativeProgram = <
     renderer,
     host: makeNativeHost<Message>(),
   })
-  const fiber = Effect.runFork(runtime.start())
+  const maybePreservedModel = Option.isSome(maybeModelPreservation)
+    ? takeOverProgram(id, animationHost)
+    : Option.none<unknown>()
+  const fiber = Effect.runFork(
+    runtime.start(Option.getOrUndefined(maybePreservedModel)),
+  )
   const getSnapshot = (): NativeNode<Message> => snapshot
+  let unregisterProgram = Function.constVoid
 
-  return {
+  const program: NativeProgram<Model, Message> = {
     animationHost,
     recordInputEvent: () => ++inputRevision,
     getModel: () =>
@@ -330,7 +354,25 @@ export const makeNativeProgram = <
 
       isDisposed = true
       listeners.clear()
+      unregisterProgram()
       Effect.runFork(Fiber.interrupt(fiber))
     },
   }
+
+  if (Option.isSome(maybeModelPreservation)) {
+    const { encodeModel } = maybeModelPreservation.value
+    const encodeModelSafely = Option.liftThrowable(encodeModel)
+    const readEncodedModel = (): Option.Option<unknown> =>
+      Option.flatMap(maybeReadLiveModel, readLiveModel =>
+        encodeModelSafely(readLiveModel()),
+      )
+
+    unregisterProgram = registerProgram(id, {
+      animationHost,
+      readEncodedModel,
+      dispose: program.dispose,
+    })
+  }
+
+  return program
 }
