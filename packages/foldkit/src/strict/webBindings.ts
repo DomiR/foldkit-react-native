@@ -10,10 +10,16 @@ import {
 
 import { brandViewResult } from '../brand/brand.js'
 import {
-  Prop,
+  EXIT_MARKER_ATTRIBUTE,
+  EXIT_RUNNER_PROPERTY,
+  type ExitRunner,
+  markExitRunnersInUse,
+} from '../exitModule.js'
+import {
   type Attribute,
   type Html,
   type HtmlBuilder,
+  Prop,
 } from '../html/index.js'
 import type {
   AnimatedStyleBinding,
@@ -29,12 +35,15 @@ type Bindings<Message> = Readonly<{
   gestures?: ReadonlyArray<StrictGesture<Message>>
   animatedStyles?: ReadonlyArray<AnimatedStyleBinding>
   entering?: StrictLayoutAnimation
+  exiting?: StrictLayoutAnimation
   onTransitionEnd?: Message
 }>
 
 const BINDINGS_PROPERTY = '__foldkitStrictBindings'
 const DEFAULT_LAYOUT_MS = 300
+const EXIT_FALLBACK_GRACE_MS = 50
 const styledDocuments = new WeakSet<Document>()
+const exitingElements = new WeakSet<Element>()
 const KEYFRAMES = `
 @keyframes foldkit-strict-FadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes foldkit-strict-FadeOut { from { opacity: 1 } to { opacity: 0 } }
@@ -52,6 +61,78 @@ const ensureKeyframes = (document: Document): void => {
   style.textContent = KEYFRAMES
   document.head.appendChild(style)
   styledDocuments.add(document)
+}
+
+const ReadBindings = Schema.declare<
+  <Message>() => Readonly<{
+    bindings: Bindings<Message>
+    css: Record<string, string>
+  }>
+>(
+  (
+    input,
+  ): input is <Message>() => Readonly<{
+    bindings: Bindings<Message>
+    css: Record<string, string>
+  }> => Predicate.isFunction(input),
+)
+const decodeReadBindings = Schema.decodeUnknownSync(ReadBindings)
+
+const readBindings = <Message>(element: Element) =>
+  decodeReadBindings(Reflect.get(element, BINDINGS_PROPERTY))<Message>()
+
+const runExit: ExitRunner = (element, done) => {
+  if (!(element instanceof HTMLElement)) {
+    done()
+    return Function.constVoid
+  }
+
+  const { exiting } = readBindings<unknown>(element).bindings
+  const ownerWindow = element.ownerDocument.defaultView
+
+  if (
+    exiting === undefined ||
+    ownerWindow === null ||
+    ownerWindow.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  ) {
+    done()
+    return Function.constVoid
+  }
+
+  ensureKeyframes(element.ownerDocument)
+  const durationMs = exiting.durationMs ?? DEFAULT_LAYOUT_MS
+
+  exitingElements.add(element)
+  element.style.setProperty('animation-name', `foldkit-strict-${exiting._tag}`)
+  element.style.setProperty('animation-duration', `${durationMs}ms`)
+  element.style.setProperty('animation-fill-mode', 'forwards')
+  element.style.setProperty('animation-delay', '0ms')
+  element.style.setProperty('animation-iteration-count', '1')
+
+  let isFinished = false
+  const finish = (): void => {
+    if (isFinished) {
+      return
+    }
+
+    isFinished = true
+    element.removeEventListener('animationend', onAnimationEnd)
+    ownerWindow.clearTimeout(timer)
+    done()
+  }
+  const onAnimationEnd = (event: Event): void => {
+    if (event.target === element) {
+      finish()
+    }
+  }
+
+  element.addEventListener('animationend', onAnimationEnd)
+  const timer = ownerWindow.setTimeout(
+    finish,
+    durationMs + EXIT_FALLBACK_GRACE_MS,
+  )
+
+  return finish
 }
 
 /** Builds elements with one scoped Mount for animation and gesture bindings.
@@ -73,6 +154,7 @@ export const renderStrictElement = <Message>(
     isGestured ||
     isAnimatedBinding ||
     bindings.entering !== undefined ||
+    bindings.exiting !== undefined ||
     bindings.onTransitionEnd !== undefined
   if (!isBound) {
     if (key === undefined) {
@@ -123,20 +205,20 @@ export const renderStrictElement = <Message>(
     ? { 'touch-action': 'none', 'user-select': 'none' }
     : {}
   const css = { ...readCss(bindings), ...enteringCss, ...gestureCss }
-  const ReadBindings = Schema.declare<
-    () => Readonly<{ bindings: Bindings<Message>; css: Record<string, string> }>
-  >(
-    (
-      input,
-    ): input is () => Readonly<{
-      bindings: Bindings<Message>
-      css: Record<string, string>
-    }> => Predicate.isFunction(input),
-  )
-  const decodeReadBindings = Schema.decodeUnknownSync(ReadBindings)
+  const exitAttributes: Array<Attribute<Message>> = []
+
+  if (bindings.exiting !== undefined) {
+    markExitRunnersInUse()
+    exitAttributes.push(
+      h.Attribute(EXIT_MARKER_ATTRIBUTE, ''),
+      Prop({ key: EXIT_RUNNER_PROPERTY, value: runExit }),
+    )
+  }
+
   const target = h[tag](
     [
       ...attributes,
+      ...exitAttributes,
       ...(isGestured ? [h.DataAttribute('foldkit-strict-gesture', '')] : []),
       h.Style(css),
       Prop({
@@ -154,8 +236,7 @@ export const renderStrictElement = <Message>(
               if (!(element instanceof HTMLElement)) {
                 return yield* Effect.never
               }
-              const readCurrent = () =>
-                decodeReadBindings(Reflect.get(element, BINDINGS_PROPERTY))()
+              const readCurrent = () => readBindings<Message>(element)
               const emit = (message: Message) => {
                 Queue.offerUnsafe(queue, message)
               }
@@ -182,6 +263,10 @@ export const renderStrictElement = <Message>(
                   const unsubscribe =
                     isAnimatedBinding && host !== undefined
                       ? host.subscribe(() => {
+                          if (exitingElements.has(element)) {
+                            return
+                          }
+
                           const current = readCurrent()
                           const nextCss = (
                             current.bindings.animatedStyles ?? []
