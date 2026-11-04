@@ -7,6 +7,8 @@ import { Message } from './message'
 import { type Model, Submission } from './model'
 import { isFormValid } from './validation'
 
+const MESSAGE_ROWS = 4
+
 const inputStyle: StrictStyle = {
   backgroundColor: '#ffffff',
   color: '#182c25',
@@ -23,24 +25,33 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
     label: string,
     field: Field<string>,
     toMessage: (value: string) => Message,
-  ) =>
-    h.div(
+    kind: 'Input' | 'Textarea',
+  ) => {
+    const sharedAttributes = [
+      h.Style({
+        ...inputStyle,
+        borderColor: field._tag === 'Invalid' ? '#aa3434' : '#acbab2',
+      }),
+      h.AriaLabel(label),
+      h.Value(field.value),
+      h.OnInput(toMessage),
+    ]
+    const fieldElement =
+      kind === 'Textarea'
+        ? h.textarea([...sharedAttributes, h.Rows(MESSAGE_ROWS)])
+        : h.input([
+            ...sharedAttributes,
+            h.OnSubmitEditing(Message.ClickedFormSubmit()),
+          ])
+
+    return h.div(
       [h.Style({ gap: 8 })],
       [
         h.label(
           [h.Style({ color: '#182c25', fontSize: 16, fontWeight: 'bold' })],
           [label],
         ),
-        h.input([
-          h.Style({
-            ...inputStyle,
-            borderColor: field._tag === 'Invalid' ? '#aa3434' : '#acbab2',
-          }),
-          h.AriaLabel(label),
-          h.Value(field.value),
-          h.OnInput(toMessage),
-          h.OnSubmitEditing(Message.ClickedFormSubmit()),
-        ]),
+        fieldElement,
         FieldValidation.match(field, {
           onNotValidated: () => h.empty,
           onValidating: () =>
@@ -51,6 +62,7 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
         }),
       ],
     )
+  }
   const isSubmitting = model.submission._tag === 'Submitting'
   const isSubmitDisabled = !isFormValid(model) || isSubmitting
 
@@ -61,10 +73,23 @@ export const strictView: StrictView<Model, Message> = (model, h) => {
         [h.Style({ fontSize: 28, fontWeight: 'bold', color: '#182c25' })],
         ['Join our waitlist'],
       ),
-      fieldView('Name', model.name, value => Message.UpdatedName({ value })),
-      fieldView('Email', model.email, value => Message.UpdatedEmail({ value })),
-      fieldView('Message', model.messageText, value =>
-        Message.UpdatedMessageText({ value }),
+      fieldView(
+        'Name',
+        model.name,
+        value => Message.UpdatedName({ value }),
+        'Input',
+      ),
+      fieldView(
+        'Email',
+        model.email,
+        value => Message.UpdatedEmail({ value }),
+        'Input',
+      ),
+      fieldView(
+        'Message',
+        model.messageText,
+        value => Message.UpdatedMessageText({ value }),
+        'Textarea',
       ),
       h.button(
         [

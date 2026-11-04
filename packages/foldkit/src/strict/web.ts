@@ -1,7 +1,7 @@
 import { Array, Option } from 'effect'
 
-import { isChildAttribute } from '../html/childAttribute.js'
 import type { Attribute, Html, HtmlBuilder } from '../html/index.js'
+import { createKeyedLazy } from '../html/lazy.js'
 import type {
   AnimatedStyleBinding,
   StrictLayoutAnimation,
@@ -17,7 +17,7 @@ import type {
 import type { WebAnimationHost } from './webAnimation.js'
 import { renderStrictElement } from './webBindings.js'
 import { renderStrictList } from './webList.js'
-import { isStyleAttribute, toCssProperties } from './webStyle.js'
+import { toCssProperties } from './webStyle.js'
 
 type NavigationAttributes<Message> = Readonly<{
   title?: string
@@ -32,6 +32,21 @@ type NavigationAttributes<Message> = Readonly<{
   onTransitionEnd?: Message
   onEndReached?: Message
 }>
+
+const unkeyedLazy = Symbol('unkeyed')
+const webLazySlots = new WeakMap<object, ReturnType<typeof createKeyedLazy>>()
+
+const resolveWebLazy = <Args extends ReadonlyArray<unknown>>(
+  slot: object,
+  key: PropertyKey | undefined,
+  view: (...args: Args) => Html,
+  args: Args,
+): Html => {
+  const keyedLazy = webLazySlots.get(slot) ?? createKeyedLazy()
+  webLazySlots.set(slot, keyedLazy)
+
+  return keyedLazy(key ?? unkeyedLazy, view, args)
+}
 
 const layoutDefaults: Record<string, string> = {
   display: 'flex',
@@ -68,6 +83,10 @@ const controlDefaults: Record<string, string> = {
   'text-align': 'inherit',
 }
 
+const textareaDefaults: Record<string, string> = {
+  resize: 'none',
+}
+
 const navigationStyle: Record<string, string> = {
   height: '100%',
   'max-height': '100dvh',
@@ -86,16 +105,19 @@ const bodyStyle: Record<string, string> = {
 
 /** Adapts a web HtmlBuilder to the portable strict subset. It applies native
  * layout defaults, resets controls, and converts numeric lengths to CSS pixels.
- * Entering uses CSS keyframes. Removed elements with Exiting stay inert until
- * their exit keyframes end. Reduced motion and DevTools replay remove them at
- * once. Re-adding the same key while its ghost exits renders a new element
- * beside the ghost, as on native.
+ * Portable transitions use CSS transitions and Entering uses CSS keyframes, both
+ * with reduced-motion support.
+ * Web animation Commands resolve at their target when reduced motion is active.
+ * Removed elements with Exiting stay inert until their exit keyframes end.
+ * Reduced motion and DevTools replay remove them at once. Re-adding the same
+ * key while its ghost exits renders a new element beside the ghost, as on native.
  * @experimental The strict adapter contract may change between releases. */
 export const toStrictHtml = <Message>(
   h: HtmlBuilder<Message>,
   animationHost?: WebAnimationHost,
 ): StrictHtmlBuilder<Message, Html, Attribute<Message>> => {
   const styleValues = new WeakMap<Attribute<Message>, StrictStyle>()
+  const submitEditingAttributes = new WeakSet<Attribute<Message>>()
   const navigationValues = new WeakMap<
     Attribute<Message>,
     NavigationAttributes<Message>
@@ -130,10 +152,19 @@ export const toStrictHtml = <Message>(
     )
   const readTitle = (screen: StrictScreen<Html, Attribute<Message>>): string =>
     readNavigation(screen.attributes).title ?? screen.key
+  const readPortableStyle = (
+    attributes: ReadonlyArray<Attribute<Message>>,
+  ): StrictStyle =>
+    attributes.reduce<StrictStyle>(
+      (style, attribute) => ({ ...style, ...styleValues.get(attribute) }),
+      {},
+    )
 
   const attributesFor = (
     tag: StrictTag,
     attributes: ReadonlyArray<Attribute<Message>>,
+    portableStyle: StrictStyle,
+    isStickyFooter = false,
   ): ReadonlyArray<Attribute<Message>> => {
     const isText =
       tag === 'span' ||
@@ -147,31 +178,44 @@ export const toStrictHtml = <Message>(
       ...(isText ? textDefaults : {}),
       ...(tag === 'span' ? { display: 'inline' } : {}),
     }
-    const isControl = tag === 'button' || tag === 'input'
-    const portableStyle = attributes.reduce<StrictStyle>(
-      (style, attribute) => ({ ...style, ...styleValues.get(attribute) }),
-      {},
-    )
+    const isControl = tag === 'button' || tag === 'input' || tag === 'textarea'
     const style = attributes.reduce<Record<string, string>>(
       (style, attribute) =>
-        isStyleAttribute(attribute) && !styleValues.has(attribute)
+        attribute._tag === 'Style' && !styleValues.has(attribute)
           ? { ...style, ...attribute.value }
           : style,
-      { ...defaults, ...(isControl ? controlDefaults : {}) },
+      {
+        ...defaults,
+        ...(isControl ? controlDefaults : {}),
+        ...(tag === 'textarea' ? textareaDefaults : {}),
+      },
     )
-    const css = { ...style, ...toCssProperties(portableStyle) }
+    const css = {
+      ...style,
+      ...toCssProperties(portableStyle),
+      ...(isStickyFooter
+        ? {
+            position: 'sticky',
+            bottom: '0px',
+            'z-index': '1',
+            ...(portableStyle.backgroundColor === undefined
+              ? { 'background-color': 'inherit' }
+              : {}),
+          }
+        : {}),
+    }
     const isCheckbox =
       tag === 'input' &&
-      attributes.some(
-        attribute =>
-          !isChildAttribute(attribute) && attribute._tag === 'Checked',
-      )
+      attributes.some(attribute => attribute._tag === 'Checked')
     const inputType = isCheckbox ? 'checkbox' : 'text'
     const controlAttributes: Array<Attribute<Message>> = []
     if (tag === 'button') {
       controlAttributes.push(h.Type('button'))
     } else if (tag === 'input') {
       controlAttributes.push(h.Type(inputType))
+      if (isCheckbox) {
+        controlAttributes.push(h.Role('switch'))
+      }
     }
 
     return [
@@ -179,7 +223,9 @@ export const toStrictHtml = <Message>(
       ...Array.filter(
         attributes,
         attribute =>
-          !isStyleAttribute(attribute) && !navigationValues.has(attribute),
+          attribute._tag !== 'Style' &&
+          !navigationValues.has(attribute) &&
+          !(tag === 'textarea' && submitEditingAttributes.has(attribute)),
       ),
       h.Style(css),
     ]
@@ -189,15 +235,28 @@ export const toStrictHtml = <Message>(
     attributes: ReadonlyArray<Attribute<Message>>,
     children?: ReadonlyArray<Html | string | null>,
     key?: string,
+    isStickyFooter = false,
   ): Html => {
-    const normalizedAttributes = attributesFor(tag, attributes)
+    const portableStyle = readPortableStyle(attributes)
+    const isTransitioned =
+      (portableStyle.transitionProperty !== undefined ||
+        portableStyle.transitionDuration !== undefined ||
+        portableStyle.transitionDelay !== undefined ||
+        portableStyle.transitionTimingFunction !== undefined) &&
+      portableStyle.transitionProperty !== 'none'
+    const normalizedAttributes = attributesFor(
+      tag,
+      attributes,
+      portableStyle,
+      isStickyFooter,
+    )
     const bindings = readNavigation(attributes)
     return renderStrictElement(
       h,
       tag,
       normalizedAttributes,
       children,
-      bindings,
+      { ...bindings, isTransitioned },
       animationHost,
       key,
     )
@@ -221,11 +280,21 @@ export const toStrictHtml = <Message>(
     label: element('label'),
     button: element('button'),
     input: element('input'),
+    textarea: attributes => buildElement('textarea', attributes),
     img: element('img'),
     ul: element('ul'),
     li: element('li'),
-    keyed: tag => (key, attributes, children) =>
-      buildElement(tag, attributes, children, key),
+    footer: element('footer'),
+    stickyFooter: (attributes, children) =>
+      buildElement('footer', attributes, children, undefined, true),
+    keyed:
+      (tag: StrictTag) =>
+      (
+        key: string,
+        attributes: ReadonlyArray<Attribute<Message>>,
+        children?: ReadonlyArray<Html | string | null>,
+      ): Html =>
+        buildElement(tag, attributes, children, key),
     list: (attributes, list) =>
       renderStrictList(
         h,
@@ -304,7 +373,12 @@ export const toStrictHtml = <Message>(
         onSome: tab =>
           builder.keyed('div')(
             tab.key,
-            [h.Style(bodyStyle), ...tab.attributes],
+            [
+              h.Role('tabpanel'),
+              h.AriaLabel(readTitle(tab)),
+              h.Style(bodyStyle),
+              ...tab.attributes,
+            ],
             tab.children,
           ),
       })
@@ -376,8 +450,10 @@ export const toStrictHtml = <Message>(
     OnDismissed: onDismissed => navigationAttribute({ onDismissed }),
     SelectedTab: selectedTab => navigationAttribute({ selectedTab }),
     OnSelectTab: onSelectTab => navigationAttribute({ onSelectTab }),
+    ImmediateTabSelection: () => navigationAttribute({}),
     Gesture: gesture => navigationAttribute({ gestures: [gesture] }),
     empty: h.empty,
+    lazy: resolveWebLazy,
     Style: style => {
       const attribute = h.Style(toCssProperties(style))
       styleValues.set(attribute, style)
@@ -386,11 +462,15 @@ export const toStrictHtml = <Message>(
     OnClick: h.OnClick,
     OnEndReached: onEndReached => navigationAttribute({ onEndReached }),
     OnInput: h.OnInput,
-    OnSubmitEditing: message =>
-      h.OnKeyDownPreventDefault(key =>
+    OnSubmitEditing: message => {
+      const attribute = h.OnKeyDownPreventDefault(key =>
         key === 'Enter' ? Option.some(message) : Option.none(),
-      ),
+      )
+      submitEditingAttributes.add(attribute)
+      return attribute
+    },
     Value: h.Value,
+    Rows: h.Rows,
     Placeholder: h.Placeholder,
     Src: h.Src,
     Alt: h.Alt,

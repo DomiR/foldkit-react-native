@@ -33,7 +33,7 @@ export type NativeAttributes<Message> = Readonly<{
   onClick?: Message
   onInput?: (value: string) => Message
   onSubmitEditing?: Message
-  rows?: number
+  rows?: number;
   onEndReached?: Message
   value?: string
   placeholder?: string

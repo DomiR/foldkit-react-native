@@ -209,6 +209,7 @@ export const StrictTag = Schema.Literals([
   'label',
   'button',
   'input',
+  'textarea',
   'img',
   'ul',
   'li',
@@ -247,18 +248,23 @@ export type StrictList<Item, Node> = Readonly<{
 
 /** A host-neutral subset of HtmlBuilder. `Checked` selects a boolean input;
  * `OnClick` records its toggle. `OnSubmitEditing` records Enter on a text input.
+ * On a textarea, Enter inserts a newline and `OnSubmitEditing` is ignored.
+ * Textarea content comes from `Value`, not children.
  * @experimental The strict builder contract may change between releases. */
 export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
-  Record<StrictTag, ElementBuilder<Node, Attribute>>
+  Record<Exclude<StrictTag, 'textarea'>, ElementBuilder<Node, Attribute>> &
+    Readonly<{ textarea: (attributes: ReadonlyArray<Attribute>) => Node }>
 > &
   Readonly<{
-    keyed: (
-      tag: StrictTag,
-    ) => (
-      key: string,
-      attributes: ReadonlyArray<Attribute>,
-      children?: ReadonlyArray<Node | string | null>,
-    ) => Node
+    keyed: <Tag extends StrictTag>(
+      tag: Tag,
+    ) => Tag extends 'textarea'
+      ? (key: string, attributes: ReadonlyArray<Attribute>) => Node
+      : (
+          key: string,
+          attributes: ReadonlyArray<Attribute>,
+          children?: ReadonlyArray<Node | string | null>,
+        ) => Node
     /** Renders a long homogeneous keyed collection. `key` must return a stable
      * Model id, never the index. Hosts may call `view` lazily for visible rows.
      * `itemHeight` declares a fixed row height in density-independent pixels.
@@ -314,6 +320,7 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
     OnInput: (toMessage: (value: string) => Message) => Attribute
     OnSubmitEditing: (message: Message) => Attribute
     Value: (value: string) => Attribute
+    Rows: (rows: number) => Attribute
     Placeholder: (value: string) => Attribute
     Src: (value: string) => Attribute
     Alt: (value: string) => Attribute
