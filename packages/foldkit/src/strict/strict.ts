@@ -265,6 +265,9 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
       children?: ReadonlyArray<Node | string | null>,
     ) => StrictTab<Node, Attribute>
     Title: (title: string) => Attribute
+    /** Attaches a `StrictIcon` to a tab. Each host renders the field it
+     * supports and ignores the others. A tab without `TabIcon` shows its title
+     * alone. */
     TabIcon: (icon: StrictIcon) => Attribute
     OnDismissed: (toMessage: (dismissedCount: number) => Message) => Attribute
     SelectedTab: (key: string) => Attribute
