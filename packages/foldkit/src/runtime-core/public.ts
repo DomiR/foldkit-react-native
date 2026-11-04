@@ -1,4 +1,5 @@
 export { makeRuntimeCore } from './index.js'
+export { startDevToolsBridge } from './index.js'
 export type {
   BootMode,
   RendererContext,
@@ -10,5 +11,11 @@ export type {
   RuntimeHost,
   RuntimeHostServices,
   RuntimeRenderer,
+} from './index.js'
+export type {
+  DevToolsChannel,
+  DevToolsChannelCallbacks,
+  DevToolsRuntimeMetadata,
+  DevToolsStore,
 } from './index.js'
 export type { DrainScheduler } from './index.js'
