@@ -232,6 +232,19 @@ export type StrictScreen<Node, Attribute> = Readonly<{
 /** A keyed tab description owned by a strict tab container. @experimental */
 export type StrictTab<Node, Attribute> = StrictScreen<Node, Attribute>
 
+/** A homogeneous collection keyed by stable Model identifiers. Lists and text
+ * inputs inside rows, Gesture on the list, and Entering or Exiting on rows are
+ * unsupported. @experimental */
+export type StrictList<Item, Node> = Readonly<{
+  items: ReadonlyArray<Item>
+  key: (item: Item) => string
+  view: (item: Item, index: number) => Node
+  itemHeight?: number
+  /** Preserves the visible content position when items change. The web uses
+   * browser scroll anchoring and ignores this option. */
+  maintainVisibleContentPosition?: boolean
+}>
+
 /** A host-neutral subset of HtmlBuilder. `Checked` selects a boolean input;
  * `OnClick` records its toggle. `OnSubmitEditing` records Enter on a text input.
  * @experimental The strict builder contract may change between releases. */
@@ -245,6 +258,20 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
       key: string,
       attributes: ReadonlyArray<Attribute>,
       children?: ReadonlyArray<Node | string | null>,
+    ) => Node
+    /** Renders a long homogeneous keyed collection. `key` must return a stable
+     * Model id, never the index. Hosts may call `view` lazily for visible rows.
+     * `itemHeight` declares a fixed row height in density-independent pixels.
+     * Native uses it for row layout; the web uses it to skip layout of
+     * off-screen rows.
+     *
+     * A screen or tab body containing a list anywhere in its element tree fills
+     * the screen without scrolling; the list scrolls itself. Elements between
+     * the body and the list need `Style({ flex: 1, minHeight: 0 })`.
+     * @experimental */
+    list: <Item>(
+      attributes: ReadonlyArray<Attribute>,
+      list: StrictList<Item, Node>,
     ) => Node
     stack: (
       attributes: ReadonlyArray<Attribute>,
@@ -280,6 +307,10 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
     empty: Node
     Style: (style: StrictStyle) => Attribute
     OnClick: (message: Message) => Attribute
+    /** Records that the user scrolled near the end of a list. It may fire more
+     * than once, so update must guard repeated Messages, for example by ignoring
+     * them while a page is loading. @experimental */
+    OnEndReached: (message: Message) => Attribute
     OnInput: (toMessage: (value: string) => Message) => Attribute
     OnSubmitEditing: (message: Message) => Attribute
     Value: (value: string) => Attribute
