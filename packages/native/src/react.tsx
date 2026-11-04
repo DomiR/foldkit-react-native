@@ -20,6 +20,7 @@ import type {
   NativeStyle,
 } from './node'
 import type { NativeProgram } from './runtime'
+import { toTextAreaStyle } from './textArea'
 import { NativeInputContext, NativeTextInput } from './textInput'
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
@@ -278,6 +279,24 @@ const renderElement = <Message,>(
         })
       }
     }),
+    Match.when({ tag: 'textarea' }, () =>
+      React.createElement(NativeTextInput, {
+        motion,
+        renderRevision: node.inputRevision ?? 0,
+        ...props,
+        style: toTextAreaStyle(attributes.rows, textStyle),
+        value: attributes.value,
+        placeholder: attributes.placeholder,
+        editable: !isDisabled,
+        underlineColorAndroid: 'transparent',
+        multiline: true,
+        textAlignVertical: 'top',
+        submitBehavior: 'newline',
+        numberOfLines: attributes.rows,
+        onChangeText:
+          onInput === undefined ? undefined : value => dispatch(onInput(value)),
+      }),
+    ),
     Match.when({ tag: 'img' }, () =>
       renderImage({
         ...props,

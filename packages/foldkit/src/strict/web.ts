@@ -65,6 +65,10 @@ const controlDefaults: Record<string, string> = {
   'text-align': 'inherit',
 }
 
+const textareaDefaults: Record<string, string> = {
+  resize: 'none',
+}
+
 const navigationStyle: Record<string, string> = {
   height: '100%',
   'max-height': '100dvh',
@@ -90,6 +94,7 @@ export const toStrictHtml = <Message>(
   animationHost?: WebAnimationHost,
 ): StrictHtmlBuilder<Message, Html, Attribute<Message>> => {
   const styleValues = new WeakMap<Attribute<Message>, StrictStyle>()
+  const submitEditingAttributes = new WeakSet<Attribute<Message>>()
   const navigationValues = new WeakMap<
     Attribute<Message>,
     NavigationAttributes<Message>
@@ -141,7 +146,7 @@ export const toStrictHtml = <Message>(
       ...(isText ? textDefaults : {}),
       ...(tag === 'span' ? { display: 'inline' } : {}),
     }
-    const isControl = tag === 'button' || tag === 'input'
+    const isControl = tag === 'button' || tag === 'input' || tag === 'textarea'
     const portableStyle = attributes.reduce<StrictStyle>(
       (style, attribute) => ({ ...style, ...styleValues.get(attribute) }),
       {},
@@ -151,7 +156,11 @@ export const toStrictHtml = <Message>(
         attribute._tag === 'Style' && !styleValues.has(attribute)
           ? { ...style, ...attribute.value }
           : style,
-      { ...defaults, ...(isControl ? controlDefaults : {}) },
+      {
+        ...defaults,
+        ...(isControl ? controlDefaults : {}),
+        ...(tag === 'textarea' ? textareaDefaults : {}),
+      },
     )
     const css = { ...style, ...toCssProperties(portableStyle) }
     const isCheckbox =
@@ -170,7 +179,9 @@ export const toStrictHtml = <Message>(
       ...Array.filter(
         attributes,
         attribute =>
-          attribute._tag !== 'Style' && !navigationValues.has(attribute),
+          attribute._tag !== 'Style' &&
+          !navigationValues.has(attribute) &&
+          !(tag === 'textarea' && submitEditingAttributes.has(attribute)),
       ),
       h.Style(css),
     ]
@@ -212,11 +223,18 @@ export const toStrictHtml = <Message>(
     label: element('label'),
     button: element('button'),
     input: element('input'),
+    textarea: attributes => buildElement('textarea', attributes),
     img: element('img'),
     ul: element('ul'),
     li: element('li'),
-    keyed: tag => (key, attributes, children) =>
-      buildElement(tag, attributes, children, key),
+    keyed:
+      (tag: StrictTag) =>
+      (
+        key: string,
+        attributes: ReadonlyArray<Attribute<Message>>,
+        children?: ReadonlyArray<Html | string | null>,
+      ): Html =>
+        buildElement(tag, attributes, children, key),
     screen: (key, attributes, children = []) => ({ key, attributes, children }),
     tab: (key, attributes, children = []) => ({ key, attributes, children }),
     stack: (attributes, screens) =>
@@ -368,11 +386,15 @@ export const toStrictHtml = <Message>(
     },
     OnClick: h.OnClick,
     OnInput: h.OnInput,
-    OnSubmitEditing: message =>
-      h.OnKeyDownPreventDefault(key =>
+    OnSubmitEditing: message => {
+      const attribute = h.OnKeyDownPreventDefault(key =>
         key === 'Enter' ? Option.some(message) : Option.none(),
-      ),
+      )
+      submitEditingAttributes.add(attribute)
+      return attribute
+    },
     Value: h.Value,
+    Rows: h.Rows,
     Placeholder: h.Placeholder,
     Src: h.Src,
     Alt: h.Alt,
