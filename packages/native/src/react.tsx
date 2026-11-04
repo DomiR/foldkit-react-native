@@ -5,6 +5,7 @@ import type { TextStyle } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
+import { toAccessibilityProps } from './accessibility'
 import {
   NativeAnimatedElement,
   toNativeStyle,
@@ -19,8 +20,10 @@ import type {
   NativeNode,
   NativeStyle,
 } from './node'
+import { withReducedMotion } from './reducedMotion'
 import type { NativeProgram } from './runtime'
 import { NativeInputContext, NativeTextInput } from './textInput'
+import { useReducedMotion } from './useReducedMotion'
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
@@ -28,6 +31,7 @@ const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
 const splitStyle = (
   style: NativeStyle | undefined,
   inheritedTextStyle: TextStyle,
+  isReducedMotion: boolean,
 ) => {
   const {
     color,
@@ -39,7 +43,7 @@ const splitStyle = (
     textAlign,
     textDecorationLine,
     ...layout
-  } = toNativeStyle(style ?? {})
+  } = toNativeStyle(withReducedMotion(style ?? {}, isReducedMotion))
   const text: TextStyle = {
     ...inheritedTextStyle,
     ...Record.filter(
@@ -66,6 +70,7 @@ const renderChild = <Message,>(
   isTextParent: boolean,
   textStyle: TextStyle,
   isActive: boolean,
+  isReducedMotion: boolean,
 ): React.ReactNode => {
   if (child === null) {
     return null
@@ -78,7 +83,7 @@ const renderChild = <Message,>(
       return React.createElement(Text, { style: textStyle }, child)
     }
   } else {
-    return renderNode(child, dispatch, textStyle, isActive)
+    return renderNode(child, dispatch, textStyle, isActive, isReducedMotion)
   }
 }
 
@@ -87,14 +92,18 @@ const renderElement = <Message,>(
   dispatch: (message: Message) => void,
   inheritedTextStyle: TextStyle,
   isActive: boolean,
+  isReducedMotion: boolean,
   motion?: NativeMotion,
 ): React.ReactElement => {
   const { key, attributes, children } = node
-  const { style, ariaLabel, onClick, onInput, onSubmitEditing, isDisabled } =
-    attributes
-  const { layout, text } = splitStyle(style, inheritedTextStyle)
+  const { style, onClick, onInput, onSubmitEditing, isDisabled } = attributes
+  const { layout, text } = splitStyle(
+    style,
+    inheritedTextStyle,
+    isReducedMotion,
+  )
   const onPress = onClick === undefined ? undefined : () => dispatch(onClick)
-  const props = { key, accessibilityLabel: ariaLabel }
+  const props = { key, ...toAccessibilityProps(node.tag, attributes) }
   const motionProps =
     motion === undefined
       ? {}
@@ -182,7 +191,14 @@ const renderElement = <Message,>(
   }
   const renderChildren = (isTextParent: boolean) =>
     children.map(child =>
-      renderChild(child, dispatch, isTextParent, text, isActive),
+      renderChild(
+        child,
+        dispatch,
+        isTextParent,
+        text,
+        isActive,
+        isReducedMotion,
+      ),
     )
 
   return Match.value(node).pipe(
@@ -209,7 +225,6 @@ const renderElement = <Message,>(
             style: textStyle,
             onPress,
             disabled: isDisabled,
-            accessibilityRole: node.tag.startsWith('h') ? 'header' : undefined,
           },
           ...renderChildren(true),
         ),
@@ -219,7 +234,6 @@ const renderElement = <Message,>(
         {
           ...props,
           style: layoutStyle,
-          accessibilityRole: 'button',
           onPress,
           disabled: isDisabled,
         },
@@ -281,8 +295,8 @@ const renderElement = <Message,>(
     Match.when({ tag: 'img' }, () =>
       renderImage({
         ...props,
+        accessible: props.accessibilityLabel !== undefined,
         style: layoutStyle,
-        accessibilityLabel: ariaLabel ?? attributes.alt,
         source:
           attributes.src === undefined ? undefined : { uri: attributes.src },
       }),
@@ -296,6 +310,7 @@ const renderNode = <Message,>(
   dispatch: (message: Message) => void,
   inheritedTextStyle: TextStyle,
   isActive: boolean,
+  isReducedMotion: boolean,
 ): React.ReactElement | null => {
   const renderContent = (
     attributes: NativeAttributes<Message>,
@@ -307,6 +322,7 @@ const renderNode = <Message,>(
       dispatch,
       inheritedTextStyle,
       isChildActive,
+      isReducedMotion,
     )
   const rendered = Match.value(node).pipe(
     Match.tagsExhaustive({
@@ -334,11 +350,18 @@ const renderNode = <Message,>(
                 dispatch,
                 inheritedTextStyle,
                 isActive,
+                isReducedMotion,
                 motion,
               ),
           })
         } else {
-          return renderElement(element, dispatch, inheritedTextStyle, isActive)
+          return renderElement(
+            element,
+            dispatch,
+            inheritedTextStyle,
+            isActive,
+            isReducedMotion,
+          )
         }
       },
       Stack: node =>
@@ -381,6 +404,7 @@ export const FoldkitRoot = <Model, Message>({
 }: Readonly<{
   program: NativeProgram<Model, Message>
 }>): React.ReactElement | null => {
+  const isReducedMotion = useReducedMotion()
   const node = React.useSyncExternalStore(
     program.subscribe,
     program.getSnapshot,
@@ -395,7 +419,7 @@ export const FoldkitRoot = <Model, Message>({
       React.createElement(
         GestureHandlerRootView,
         { style: { flex: 1 } },
-        renderNode(node, program.dispatch, {}, true),
+        renderNode(node, program.dispatch, {}, true, isReducedMotion),
       ),
     ),
   )
