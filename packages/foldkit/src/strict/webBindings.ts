@@ -36,6 +36,7 @@ import { toCssProperties } from './webStyle.js'
 type Bindings<Message> = Readonly<{
   gestures?: ReadonlyArray<StrictGesture<Message>>
   animatedStyles?: ReadonlyArray<AnimatedStyleBinding>
+  isTransitioned: boolean
   entering?: StrictLayoutAnimation
   exiting?: StrictLayoutAnimation
   onTransitionEnd?: Message
@@ -82,12 +83,19 @@ const KEYFRAMES = `
 @keyframes foldkit-strict-ZoomOut { from { transform: scale(1); opacity: 1 } to { transform: scale(0); opacity: 0 } }
 `
 
-const ensureKeyframes = (document: Document): void => {
+const ensureStrictStylesheet = (document: Document): void => {
   if (styledDocuments.has(document)) {
     return
   }
   const style = document.createElement('style')
-  style.textContent = KEYFRAMES
+  style.textContent = `${KEYFRAMES}
+@media (prefers-reduced-motion: reduce) {
+  [data-foldkit-strict-motion] {
+    animation: none !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0s !important;
+  }
+}`
   document.head.appendChild(style)
   styledDocuments.add(document)
 }
@@ -182,6 +190,7 @@ export const renderStrictElement = <Message>(
   const isBound =
     isGestured ||
     isAnimatedBinding ||
+    bindings.isTransitioned ||
     bindings.entering !== undefined ||
     bindings.exiting !== undefined ||
     bindings.onTransitionEnd !== undefined
@@ -229,6 +238,7 @@ export const renderStrictElement = <Message>(
   const gestureCss = isGestured
     ? { 'touch-action': 'none', 'user-select': 'none' }
     : {}
+  const isMotion = bindings.isTransitioned || bindings.entering !== undefined
   const css = { ...readCss(bindings), ...enteringCss, ...gestureCss }
   const exitAttributes: Array<Attribute<Message>> = []
 
@@ -248,6 +258,7 @@ export const renderStrictElement = <Message>(
       ...attributes,
       ...exitAttributes,
       ...(isGestured ? [h.DataAttribute('foldkit-strict-gesture', '')] : []),
+      ...(isMotion ? [h.DataAttribute('foldkit-strict-motion', '')] : []),
       h.Style(css),
       Prop({
         key: BINDINGS_PROPERTY,
@@ -276,8 +287,8 @@ export const renderStrictElement = <Message>(
               }
               yield* Effect.acquireRelease(
                 Effect.sync(() => {
-                  if (bindings.entering !== undefined) {
-                    ensureKeyframes(element.ownerDocument)
+                  if (isMotion) {
+                    ensureStrictStylesheet(element.ownerDocument)
                   }
                   const removeGestures = isGestured
                     ? listenForGestures(
@@ -342,6 +353,7 @@ export const renderStrictElement = <Message>(
     'foldkit/strict/boundTarget',
     isGestured ? 'gestures' : 'plain',
     isAnimatedBinding ? 'animated' : 'static',
+    isMotion ? 'motion' : 'static',
   ].join('/')
   const brandedTarget = brandViewResult(target, targetIdentity)
   const wrapperAttributes = [h.Style({ display: 'contents' })]

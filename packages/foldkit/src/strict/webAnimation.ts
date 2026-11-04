@@ -1,4 +1,4 @@
-import { Array, Effect, Layer, Option } from 'effect'
+import { Array, Effect, Layer, Option, Predicate } from 'effect'
 
 import {
   AnimatedValues,
@@ -15,6 +15,13 @@ const STEP_SECONDS = 1 / 120
 const MILLIS_PER_SECOND = 1000
 const SPRING_TOLERANCE = 0.1
 const MAX_SPRING_MS = 10000
+const prefersReducedMotion = (): boolean => {
+  const matchMedia = globalThis.matchMedia
+  return (
+    Predicate.isFunction(matchMedia) &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
 
 /** One web runtime's animation registry and resource Layer. Bindings use its
  * frame notifications; application code uses its services inside Commands.
@@ -29,7 +36,9 @@ export type WebAnimationHost = Readonly<{
 
 /** Creates a registry for one runtime. Springs use unit mass. Background
  * worklets run on the main thread after allowing the next frame to paint.
- * Disposing the resource Layer cancels frames and pending animations.
+ * When reduced motion is active, animateTo writes its target and resolves
+ * without requesting animation frames. Disposing the resource Layer cancels
+ * frames and pending animations.
  * @experimental */
 export const makeWebAnimationHost = (): WebAnimationHost => {
   const values = new Map<string, number>()
@@ -74,6 +83,12 @@ export const makeWebAnimationHost = (): WebAnimationHost => {
         return
       }
       cancel(key.name)
+      if (prefersReducedMotion()) {
+        values.set(key.name, target)
+        notify()
+        resume(Effect.succeed({ isFinished: true }))
+        return
+      }
       const initial = read(key)
       let position = initial
       let velocity = 0
