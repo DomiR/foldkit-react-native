@@ -11,6 +11,7 @@ import { ScreenStack, ScreenStackItem, Tabs } from 'react-native-screens'
 import { SafeAreaView } from 'react-native-screens/experimental'
 
 import { collectNativeAttributes } from './builder'
+import { ListScrollContext } from './list'
 import type {
   NativeAttributes,
   NativeChild,
@@ -43,6 +44,20 @@ const isNavigationContent = <Message,>(
       (child._tag === 'Stack' || child._tag === 'Tabs'),
   )
 
+const containsList = <Message,>(
+  children: ReadonlyArray<NativeChild<Message>>,
+): boolean =>
+  Array.some(children, child => {
+    if (child === null || Predicate.isString(child)) {
+      return false
+    }
+
+    return (
+      child._tag === 'List' ||
+      (child._tag === 'Element' && containsList(child.children))
+    )
+  })
+
 const NavigationBackgroundContext = React.createContext('#ffffff')
 
 const NavigationBody = <Message,>({
@@ -67,6 +82,27 @@ const NavigationBody = <Message,>({
       <View style={styles.fill}>
         {renderContent({ ...attributes, style }, children, isActive)}
       </View>
+    )
+  }
+
+  if (containsList(children)) {
+    return (
+      <ListScrollContext.Provider
+        value={{
+          contentInsetAdjustmentBehavior: isStackScreen ? 'never' : 'automatic',
+        }}
+      >
+        <View style={styles.fill}>
+          {renderContent(
+            {
+              ...attributes,
+              style: { ...contentStyle, flex: 1, minHeight: 0 },
+            },
+            children,
+            isActive,
+          )}
+        </View>
+      </ListScrollContext.Provider>
     )
   }
 

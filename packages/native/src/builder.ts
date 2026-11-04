@@ -1,3 +1,4 @@
+import { Array } from 'effect'
 import type { StrictHtmlBuilder } from 'foldkit/strict'
 
 import type {
@@ -87,6 +88,27 @@ export const makeNativeBuilder = <Message>(
     li: element('li'),
     keyed: tag => (key, attributes, children) =>
       buildElement(tag, attributes, children, key),
+    list: (
+      attributes,
+      { items, key, view, itemHeight, maintainVisibleContentPosition },
+    ) => {
+      const collected = collectNativeAttributes(attributes)
+      const { key: attributeKey, ...listAttributes } = collected
+
+      return {
+        _tag: 'List',
+        key: attributeKey,
+        attributes: listAttributes,
+        rows: Array.map(items, (item, index) => ({
+          key: key(item),
+          render: () => view(item, index),
+        })),
+        ...(itemHeight === undefined ? {} : { itemHeight }),
+        ...(maintainVisibleContentPosition === undefined
+          ? {}
+          : { maintainVisibleContentPosition }),
+      }
+    },
     stack: (attributes, screens) => ({
       _tag: 'Stack',
       attributes: collectNativeAttributes(attributes),
@@ -114,6 +136,7 @@ export const makeNativeBuilder = <Message>(
     OnClick: message => ({ onClick: message }),
     OnInput: toMessage => ({ onInput: toMessage }),
     OnSubmitEditing: message => ({ onSubmitEditing: message }),
+    OnEndReached: message => ({ onEndReached: message }),
     Value: value => ({ value }),
     Placeholder: placeholder => ({ placeholder }),
     Src: src => ({ src }),
