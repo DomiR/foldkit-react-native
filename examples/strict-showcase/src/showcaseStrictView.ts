@@ -3,23 +3,25 @@ import { Array, Option } from 'effect'
 import {
   LongPress,
   Pan,
+  type StrictView,
   Swipe,
   Tap,
   mapMessages,
-  type StrictView,
 } from 'foldkit/strict'
 import { strictView as formView } from 'form-example/strictView'
 import { strictView as stopwatchView } from 'stopwatch-example/strictView'
 import { strictView as todoView } from 'todo-example/strictView'
 
 import { strictView as animationsView } from './animations/strictView'
+import { strictView as contactsView } from './contacts/strictView'
 import {
   Example,
   Message,
   type Model,
   ShowcaseRoute,
-  toGotCounterMessage,
   toGotAnimationsMessage,
+  toGotContactsMessage,
+  toGotCounterMessage,
   toGotFormMessage,
   toGotStopwatchMessage,
   toGotTodoMessage,
@@ -67,6 +69,8 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
         stopwatchView(model.stopwatch, mapMessages(h, toGotStopwatchMessage)),
       Todo: () => todoView(model.todo, mapMessages(h, toGotTodoMessage)),
       Form: () => formView(model.form, mapMessages(h, toGotFormMessage)),
+      Contacts: () =>
+        contactsView(model.contacts, mapMessages(h, toGotContactsMessage)),
     })
   const titleForRoute = (route: ShowcaseRoute): string =>
     ShowcaseRoute.match(route, {
@@ -75,6 +79,7 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
       Stopwatch: () => 'Stopwatch',
       Todo: () => 'Todo',
       Form: () => 'Form',
+      Contacts: () => 'Contacts',
     })
   const gesturesView = () =>
     h.div(
