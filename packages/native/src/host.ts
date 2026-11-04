@@ -1,10 +1,15 @@
 import { Effect, Function, Option, Schema } from 'effect'
-import type { RuntimeHost } from 'foldkit/runtime-core'
+import { type RuntimeHost, startDevToolsBridge } from 'foldkit/runtime-core'
+
+import type { ResolvedNativeDevTools } from './devTools'
+import { makeNativeWebSocketChannel } from './webSocketChannel'
 
 /** Creates native platform services without routing or development reloads. */
-export const makeNativeHost = <Message>(): RuntimeHost<Message> => ({
+export const makeNativeHost = <Message>(
+  maybeDevTools: Option.Option<ResolvedNativeDevTools<Message>> = Option.none(),
+): RuntimeHost<Message> => ({
   isDevelopment: false,
-  isDevToolsDevelopment: () => false,
+  isDevToolsDevelopment: () => Option.isSome(maybeDevTools),
   validateRuntime: Effect.void,
   resolvePreservedModel: Effect.succeed(undefined),
   provideScheduler: Function.identity,
@@ -34,9 +39,9 @@ export const makeNativeHost = <Message>(): RuntimeHost<Message> => ({
           ? Effect.die(
               new Error('[foldkit/native] This program requires Flags.'),
             )
-          : Effect.sync(() =>
-              Schema.decodeUnknownSync(Schema.toType(FlagsCodec))(undefined),
-            ),
+          : Schema.decodeUnknownEffect(Schema.toType(FlagsCodec))(
+              undefined,
+            ).pipe(Effect.orDie),
       onSome: provideResources,
     })
 
@@ -68,5 +73,16 @@ export const makeNativeHost = <Message>(): RuntimeHost<Message> => ({
   },
   makeModelPreserver: () => Effect.succeed(() => Effect.void),
   afterInitialRender: Effect.void,
-  connectDevTools: () => Effect.void,
+  connectDevTools: (store, enqueueMessageEffect) =>
+    Option.match(maybeDevTools, {
+      onNone: () => Effect.void,
+      onSome: ({ url, metadata, maybeMessageSchema }) =>
+        startDevToolsBridge(
+          store,
+          makeNativeWebSocketChannel(url),
+          () => metadata,
+          enqueueMessageEffect,
+          maybeMessageSchema,
+        ),
+    }),
 })

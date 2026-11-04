@@ -11,9 +11,9 @@ import {
 import type { Update } from 'foldkit'
 import type { ManagedResources } from 'foldkit/managedResource'
 import {
-  makeRuntimeCore,
   type RuntimeCrashConfig,
   type RuntimeRenderer,
+  makeRuntimeCore,
 } from 'foldkit/runtime-core'
 import type {
   AnimatedValues,
@@ -21,12 +21,14 @@ import type {
   StrictView,
 } from 'foldkit/strict'
 import type { Subscriptions } from 'foldkit/subscription'
+import { Platform } from 'react-native'
 
 import {
-  makeNativeAnimationHost,
   type NativeAnimationHost,
+  makeNativeAnimationHost,
 } from './animationHost'
 import { type NativeBuilder, makeNativeBuilder } from './builder'
+import { type NativeDevToolsConfig, resolveNativeDevTools } from './devTools'
 import { makeNativeHost } from './host'
 import type { NativeNode } from './node'
 
@@ -66,6 +68,7 @@ export type NativeProgramConfig<
   resources?: Layer.Layer<Resources>
   crash?: RuntimeCrashConfig<Model, Message>
   animationHost?: NativeAnimationHost
+  devTools?: NativeDevToolsConfig<Message>
 }>
 
 /** A native node store driven by Foldkit's runtime core. `getModel` reads live
@@ -74,6 +77,8 @@ export type NativeProgram<Model, Message> = Readonly<{
   animationHost: NativeAnimationHost
   /** Advances the host's editing protocol for input adapters. @internal */
   recordInputEvent: () => number
+  /** Releases replay interaction gating after React commits the live snapshot. @internal */
+  acknowledgeCommittedSnapshot: (snapshot: NativeNode<Message>) => void
   getModel: () => Model
   getSnapshot: () => NativeNode<Message>
   subscribe: (listener: () => void) => () => void
@@ -100,6 +105,9 @@ export const makeNativeProgram = <
     ManagedResourceServices
   >,
 ): NativeProgram<Model, Message> => {
+  const maybeDevTools = resolveNativeDevTools(config.devTools, Platform.OS)
+  const ModelCodec =
+    config.Model ?? Schema.declare<Model>((_value): _value is Model => true)
   let inputRevision = 0
   const h = makeNativeBuilder<Message>(() => inputRevision)
   const animationHost = config.animationHost ?? makeNativeAnimationHost()
@@ -112,6 +120,10 @@ export const makeNativeProgram = <
   let maybeReadLiveModel = Option.none<() => Model>()
   let enqueueMessage = (_message: Message): void => {}
   let isDisposed = false
+  let isInteractionPaused = (): boolean => false
+  let acknowledgeCommittedSnapshot = (
+    _snapshot: NativeNode<Message>,
+  ): void => {}
 
   const publish = (node: NativeNode<Message>): void => {
     snapshot = node
@@ -127,10 +139,33 @@ export const makeNativeProgram = <
   const renderer: RuntimeRenderer<Model, Message> = context =>
     Effect.gen(function* () {
       const { status, readLiveModel, messageQueue, commitNotifier } = context
+      const { isPausedNow, readViewState, setViewState } =
+        context.devToolsIntegration
+      isInteractionPaused = () => isPausedNow() || readViewState() === 'Paused'
       maybeReadLiveModel = Option.some(readLiveModel)
       enqueueMessage = messageQueue.enqueueMessage
       let maybeFrame = Option.none<number>()
       let maybeLastDirtyMessage = Option.none<Message>()
+      let isLiveViewRestorePending = false
+      let maybeRestoringSnapshot = Option.none<NativeNode<Message>>()
+
+      acknowledgeCommittedSnapshot = committedSnapshot => {
+        if (
+          isDisposed ||
+          status.isRuntimeDisposed ||
+          status.isCrashed ||
+          isPausedNow() ||
+          Option.isNone(maybeRestoringSnapshot) ||
+          maybeRestoringSnapshot.value !== committedSnapshot ||
+          snapshot !== committedSnapshot
+        ) {
+          return
+        }
+
+        maybeRestoringSnapshot = Option.none()
+        isLiveViewRestorePending = false
+        setViewState('Live')
+      }
 
       const settlePendingCommit = (): void => {
         if (commitNotifier.service.isCommitPending()) {
@@ -192,7 +227,13 @@ export const makeNativeProgram = <
         })
 
       const renderSync = (model: Model): void => {
-        publish(config.view(model, h))
+        const node = config.view(model, h)
+
+        if (isLiveViewRestorePending) {
+          maybeRestoringSnapshot = Option.some(node)
+        }
+
+        publish(node)
       }
 
       const render = (model: Model): Effect.Effect<void> =>
@@ -207,7 +248,13 @@ export const makeNativeProgram = <
         })
 
       const renderFrame = (): void => {
-        if (status.isRuntimeDisposed || status.isCrashed) {
+        if (
+          isDisposed ||
+          status.isRuntimeDisposed ||
+          status.isCrashed ||
+          isPausedNow() ||
+          (readViewState() === 'Paused' && !isLiveViewRestorePending)
+        ) {
           maybeFrame = Option.none()
           settlePendingCommit()
           return
@@ -236,6 +283,27 @@ export const makeNativeProgram = <
         settlePendingCommit()
       }
 
+      const scheduleRenderFrame = (isRestoringLiveView = false): void => {
+        if (isDisposed || status.isRuntimeDisposed || status.isCrashed) {
+          return
+        }
+
+        if (isRestoringLiveView && readViewState() === 'Paused') {
+          isLiveViewRestorePending = true
+        }
+
+        if (
+          Option.isSome(maybeFrame) ||
+          isPausedNow() ||
+          (readViewState() === 'Paused' && !isLiveViewRestorePending)
+        ) {
+          return
+        }
+
+        commitNotifier.markCommitPending()
+        maybeFrame = Option.some(requestAnimationFrame(renderFrame))
+      }
+
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           animationHost.dispose()
@@ -254,22 +322,63 @@ export const makeNativeProgram = <
         setLastDirtyMessage: message => {
           maybeLastDirtyMessage = Option.some(message)
         },
-        scheduleRenderFrame: () => {
-          if (
-            Option.isSome(maybeFrame) ||
-            status.isRuntimeDisposed ||
-            status.isCrashed
-          ) {
-            return
-          }
-
-          commitNotifier.markCommitPending()
-          maybeFrame = Option.some(requestAnimationFrame(renderFrame))
-        },
+        scheduleRenderFrame,
         skipPendingViewTransition: Function.constVoid,
         devToolsRenderBridge: {
-          renderReplay: () => Effect.void,
-          markRenderPending: Effect.void,
+          renderReplay: model =>
+            Effect.gen(function* () {
+              if (isDisposed || status.isRuntimeDisposed || status.isCrashed) {
+                return
+              }
+
+              const previousSnapshot = snapshot
+              const previousViewState = readViewState()
+              const wasLiveViewRestorePending = isLiveViewRestorePending
+              const maybePreviousRestoringSnapshot = maybeRestoringSnapshot
+              setViewState('Paused')
+              isLiveViewRestorePending = false
+              maybeRestoringSnapshot = Option.none()
+
+              if (Option.isSome(maybeFrame)) {
+                cancelAnimationFrame(maybeFrame.value)
+                maybeFrame = Option.none()
+              }
+
+              status.isRenderingFrame = true
+              yield* Effect.suspend(() =>
+                Schema.decodeUnknownEffect(Schema.toType(ModelCodec))(model),
+              ).pipe(
+                Effect.flatMap(replayedModel =>
+                  Effect.sync(() => {
+                    publish(config.view(replayedModel, h))
+                    maybeLastDirtyMessage = Option.none()
+                  }),
+                ),
+                Effect.catchCause(cause =>
+                  Effect.suspend(() => {
+                    snapshot = previousSnapshot
+                    setViewState(previousViewState)
+                    isLiveViewRestorePending = wasLiveViewRestorePending
+                    maybeRestoringSnapshot = maybePreviousRestoringSnapshot
+
+                    if (!isPausedNow()) {
+                      scheduleRenderFrame(true)
+                    }
+
+                    return Effect.failCause(cause)
+                  }),
+                ),
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    status.isRenderingFrame = false
+                    settlePendingCommit()
+                    messageQueue.drainPendingMessages()
+                  }),
+                ),
+                Effect.orDie,
+              )
+            }),
+          markRenderPending: Effect.sync(() => scheduleRenderFrame(true)),
         },
       }
     })
@@ -278,8 +387,7 @@ export const makeNativeProgram = <
     runtimeId: `native-${nextRuntimeId++}`,
     kind: 'Element',
     ports: undefined,
-    Model:
-      config.Model ?? Schema.declare<Model>((_value): _value is Model => true),
+    Model: ModelCodec,
     Flags: Schema.Void,
     configuredFlags: Option.none(),
     isFlagsRequired: false,
@@ -291,9 +399,9 @@ export const makeNativeProgram = <
     }),
     resources,
     ...(config.crash && { crash: config.crash }),
-    devTools: false,
+    devTools: Option.isSome(maybeDevTools) ? maybeDevTools.value.config : false,
     renderer,
-    host: makeNativeHost<Message>(),
+    host: makeNativeHost(maybeDevTools),
   })
   const fiber = Effect.runFork(runtime.start())
   const getSnapshot = (): NativeNode<Message> => snapshot
@@ -301,6 +409,7 @@ export const makeNativeProgram = <
   return {
     animationHost,
     recordInputEvent: () => ++inputRevision,
+    acknowledgeCommittedSnapshot: node => acknowledgeCommittedSnapshot(node),
     getModel: () =>
       Option.getOrThrowWith(
         maybeReadLiveModel,
@@ -318,7 +427,7 @@ export const makeNativeProgram = <
       }
     },
     dispatch: message => {
-      if (!isDisposed) {
+      if (!isDisposed && !isInteractionPaused()) {
         enqueueMessage(message)
       }
     },
