@@ -5,6 +5,7 @@ import type { TextStyle } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
+import { toAccessibilityProps } from './accessibility'
 import {
   NativeAnimatedElement,
   toNativeStyle,
@@ -20,9 +21,11 @@ import type {
   NativeNode,
   NativeStyle,
 } from './node'
+import { withReducedMotion } from './reducedMotion'
 import type { NativeProgram } from './runtime'
 import { toTextAreaStyle } from './textArea'
 import { NativeInputContext, NativeTextInput } from './textInput'
+import { useReducedMotion } from './useReducedMotion'
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
@@ -77,6 +80,7 @@ const toChildReactKeys = <Message,>(
 const splitStyle = (
   style: NativeStyle | undefined,
   inheritedTextStyle: TextStyle,
+  isReducedMotion: boolean,
 ) => {
   const {
     color,
@@ -88,7 +92,7 @@ const splitStyle = (
     textAlign,
     textDecorationLine,
     ...layout
-  } = toNativeStyle(style ?? {})
+  } = toNativeStyle(withReducedMotion(style ?? {}, isReducedMotion))
   const text: TextStyle = {
     ...inheritedTextStyle,
     ...Record.filter(
@@ -116,6 +120,7 @@ const renderChild = <Message,>(
   textStyle: TextStyle,
   isActive: boolean,
   reactKey: string | undefined,
+  isReducedMotion: boolean,
 ): React.ReactNode => {
   if (child === null) {
     return null
@@ -128,7 +133,14 @@ const renderChild = <Message,>(
       return React.createElement(Text, { style: textStyle }, child)
     }
   } else {
-    return renderNode(child, dispatch, textStyle, isActive, reactKey)
+    return renderNode(
+      child,
+      dispatch,
+      textStyle,
+      isActive,
+      reactKey,
+      isReducedMotion,
+    )
   }
 }
 
@@ -138,14 +150,18 @@ const renderElement = <Message,>(
   inheritedTextStyle: TextStyle,
   isActive: boolean,
   reactKey: string | undefined,
+  isReducedMotion: boolean,
   motion?: NativeMotion,
 ): React.ReactElement => {
   const { attributes, children } = node
-  const { style, ariaLabel, onClick, onInput, onSubmitEditing, isDisabled } =
-    attributes
-  const { layout, text } = splitStyle(style, inheritedTextStyle)
+  const { style, onClick, onInput, onSubmitEditing, isDisabled } = attributes
+  const { layout, text } = splitStyle(
+    style,
+    inheritedTextStyle,
+    isReducedMotion,
+  )
   const onPress = onClick === undefined ? undefined : () => dispatch(onClick)
-  const props = { key: reactKey, accessibilityLabel: ariaLabel }
+  const props = { key: reactKey, ...toAccessibilityProps(node.tag, attributes) }
   const motionProps =
     motion === undefined
       ? {}
@@ -234,7 +250,15 @@ const renderElement = <Message,>(
   const childReactKeys = toChildReactKeys(children)
   const renderChildren = (isTextParent: boolean) =>
     Array.zipWith(children, childReactKeys, (child, reactKey) =>
-      renderChild(child, dispatch, isTextParent, text, isActive, reactKey),
+      renderChild(
+        child,
+        dispatch,
+        isTextParent,
+        text,
+        isActive,
+        reactKey,
+        isReducedMotion,
+      ),
     )
 
   return Match.value(node).pipe(
@@ -261,7 +285,6 @@ const renderElement = <Message,>(
             style: textStyle,
             onPress,
             disabled: isDisabled,
-            accessibilityRole: node.tag.startsWith('h') ? 'header' : undefined,
           },
           ...renderChildren(true),
         ),
@@ -271,7 +294,6 @@ const renderElement = <Message,>(
         {
           ...props,
           style: layoutStyle,
-          accessibilityRole: 'button',
           onPress,
           disabled: isDisabled,
         },
@@ -351,8 +373,8 @@ const renderElement = <Message,>(
     Match.when({ tag: 'img' }, () =>
       renderImage({
         ...props,
+        accessible: props.accessibilityLabel !== undefined,
         style: layoutStyle,
-        accessibilityLabel: ariaLabel ?? attributes.alt,
         source:
           attributes.src === undefined ? undefined : { uri: attributes.src },
       }),
@@ -367,6 +389,7 @@ const renderNode = <Message,>(
   inheritedTextStyle: TextStyle,
   isActive: boolean,
   reactKey: string | undefined,
+  isReducedMotion: boolean,
 ): React.ReactElement | null => {
   const renderContent = (
     attributes: NativeAttributes<Message>,
@@ -379,6 +402,7 @@ const renderNode = <Message,>(
       inheritedTextStyle,
       isChildActive,
       undefined,
+      isReducedMotion,
     )
   const gestures = node._tag === 'Empty' ? undefined : node.attributes.gestures
   const hasGestures =
@@ -412,6 +436,7 @@ const renderNode = <Message,>(
                 inheritedTextStyle,
                 isActive,
                 undefined,
+                isReducedMotion,
                 motion,
               ),
           })
@@ -422,6 +447,7 @@ const renderNode = <Message,>(
             inheritedTextStyle,
             isActive,
             nodeReactKey,
+            isReducedMotion,
           )
         }
       },
@@ -429,6 +455,7 @@ const renderNode = <Message,>(
         const { layout, text: textStyle } = splitStyle(
           node.attributes.style,
           inheritedTextStyle,
+          isReducedMotion,
         )
 
         return React.createElement(NativeList<Message>, {
@@ -444,6 +471,7 @@ const renderNode = <Message,>(
               textStyle,
               isActive,
               toReactKey(child, 0),
+              isReducedMotion,
             ),
         })
       },
@@ -492,6 +520,7 @@ export const FoldkitRoot = <Model, Message>({
 }: Readonly<{
   program: NativeProgram<Model, Message>
 }>): React.ReactElement | null => {
+  const isReducedMotion = useReducedMotion()
   const node = React.useSyncExternalStore(
     program.subscribe,
     program.getSnapshot,
@@ -506,7 +535,14 @@ export const FoldkitRoot = <Model, Message>({
       React.createElement(
         GestureHandlerRootView,
         { style: { flex: 1 } },
-        renderNode(node, program.dispatch, {}, true, toReactKey(node, 0)),
+        renderNode(
+          node,
+          program.dispatch,
+          {},
+          true,
+          toReactKey(node, 0),
+          isReducedMotion,
+        ),
       ),
     ),
   )
