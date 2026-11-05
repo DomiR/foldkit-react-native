@@ -13,6 +13,7 @@ export type {
   NativeTag,
 } from './node'
 export { FoldkitRoot } from './react'
+export type { NativeInstrumentation } from './instrumentation'
 export type { NativeProgram, NativeProgramConfig } from './runtime'
 export { makeNativeProgram } from './runtime'
 

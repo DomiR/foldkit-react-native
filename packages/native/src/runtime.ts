@@ -32,6 +32,7 @@ import {
 import { type NativeBuilder, makeNativeBuilder } from './builder'
 import { type NativeDevToolsConfig, resolveNativeDevTools } from './devTools'
 import { makeNativeHost, rootUrl } from './host'
+import type { NativeInstrumentation } from './instrumentation'
 import { type NativeLinking, expoLinking } from './linking'
 import {
   isDevelopment,
@@ -39,6 +40,8 @@ import {
   takeOverProgram,
 } from './modelPreservation'
 import type { NativeNode } from './node'
+
+declare const performance: Readonly<{ now: () => number }>
 
 type NativeAnimationServices = AnimatedValues | BackgroundRuntime
 
@@ -79,6 +82,8 @@ type NativeProgramBaseConfig<
   animationHost?: NativeAnimationHost
   linking?: NativeLinking
   devTools?: NativeDevToolsConfig<Message>
+  /** Opt-in timing hooks. When omitted, no timing code runs. */
+  instrumentation?: NativeInstrumentation
 }>
 
 /** The shared Elm Architecture program and its native view. Configure routing
@@ -123,6 +128,8 @@ export type NativeProgram<Model, Message> = Readonly<{
   recordInputEvent: () => number
   /** Releases replay interaction gating after React commits the live snapshot. @internal */
   acknowledgeCommittedSnapshot: (snapshot: NativeNode<Message>) => void
+  /** @internal */
+  maybeInstrumentation: Option.Option<NativeInstrumentation>
   getModel: () => Model
   getSnapshot: () => NativeNode<Message>
   subscribe: (listener: () => void) => () => void
@@ -157,6 +164,17 @@ export const makeNativeProgram = <
   let inputRevision = 0
   const h = makeNativeBuilder<Message>(() => inputRevision)
   const id = config.id ?? 'main'
+  const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
+  const update = Option.match(maybeInstrumentation, {
+    onNone: () => config.update,
+    onSome: instrumentation => (model: Model, message: Message) => {
+      const startedAt = performance.now()
+      const update_ = config.update(model, message)
+      const endedAt = performance.now()
+      instrumentation.onUpdate(startedAt, endedAt)
+      return update_
+    },
+  })
   const animationHost = config.animationHost ?? makeNativeAnimationHost()
   const maybeModelPreservation = isDevelopment()
     ? Option.map(Option.fromNullishOr(config.Model), modelSchema => ({
@@ -180,6 +198,8 @@ export const makeNativeProgram = <
   let enqueueMessage = (_message: Message): void => {}
   let isDisposed = false
   let isInteractionPaused = (): boolean => false
+  let isLiveViewRestorePending = false
+  let maybeRestoringSnapshot = Option.none<NativeNode<Message>>()
   let acknowledgeCommittedSnapshot = (
     _snapshot: NativeNode<Message>,
   ): void => {}
@@ -195,6 +215,34 @@ export const makeNativeProgram = <
     }
   }
 
+  const renderSync = Option.match(maybeInstrumentation, {
+    onNone:
+      () =>
+      (model: Model): void => {
+        const node = config.view(model, h)
+
+        if (isLiveViewRestorePending) {
+          maybeRestoringSnapshot = Option.some(node)
+        }
+
+        publish(node)
+      },
+    onSome:
+      instrumentation =>
+      (model: Model): void => {
+        const startedAt = performance.now()
+        const node = config.view(model, h)
+        const endedAt = performance.now()
+        instrumentation.onView(startedAt, endedAt)
+
+        if (isLiveViewRestorePending) {
+          maybeRestoringSnapshot = Option.some(node)
+        }
+
+        publish(node)
+      },
+  })
+
   const renderer: RuntimeRenderer<Model, Message> = context =>
     Effect.gen(function* () {
       const { status, readLiveModel, messageQueue, commitNotifier } = context
@@ -205,8 +253,6 @@ export const makeNativeProgram = <
       enqueueMessage = messageQueue.enqueueMessage
       let maybeFrame = Option.none<number>()
       let maybeLastDirtyMessage = Option.none<Message>()
-      let isLiveViewRestorePending = false
-      let maybeRestoringSnapshot = Option.none<NativeNode<Message>>()
 
       acknowledgeCommittedSnapshot = committedSnapshot => {
         if (
@@ -284,16 +330,6 @@ export const makeNativeProgram = <
           )
           settlePendingCommit()
         })
-
-      const renderSync = (model: Model): void => {
-        const node = config.view(model, h)
-
-        if (isLiveViewRestorePending) {
-          maybeRestoringSnapshot = Option.some(node)
-        }
-
-        publish(node)
-      }
 
       const render = (model: Model): Effect.Effect<void> =>
         Effect.sync(() => {
@@ -451,7 +487,7 @@ export const makeNativeProgram = <
     configuredFlags: Option.none(),
     isFlagsRequired: false,
     init,
-    update: config.update,
+    update,
     ...(config.subscriptions && { subscriptions: config.subscriptions }),
     ...(config.managedResources && {
       managedResources: config.managedResources,
@@ -476,6 +512,7 @@ export const makeNativeProgram = <
     animationHost,
     recordInputEvent: () => ++inputRevision,
     acknowledgeCommittedSnapshot: node => acknowledgeCommittedSnapshot(node),
+    maybeInstrumentation,
     getModel: () =>
       Option.getOrThrowWith(
         maybeReadLiveModel,

@@ -1,4 +1,4 @@
-import { Array, Match, Predicate, Record } from 'effect'
+import { Array, Match, Option, Predicate, Record } from 'effect'
 import * as React from 'react'
 import { Image, Pressable, Switch, Text, View } from 'react-native'
 import type { TextStyle } from 'react-native'
@@ -13,6 +13,7 @@ import {
 } from './animated'
 import { NativeAnimationContext } from './animationContext'
 import { NativeGestures } from './gestures'
+import type { NativeInstrumentation } from './instrumentation'
 import { NativeList } from './list'
 import { NativeStack, NativeTabs } from './navigation'
 import type {
@@ -26,6 +27,8 @@ import type { NativeProgram } from './runtime'
 import { toTextAreaStyle } from './textArea'
 import { NativeInputContext, NativeTextInput } from './textInput'
 import { useReducedMotion } from './useReducedMotion'
+
+declare const performance: Readonly<{ now: () => number }>
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
@@ -514,23 +517,12 @@ const renderNode = <Message,>(
   }
 }
 
-/** Subscribes to native frames and renders them inside a GestureHandlerRootView. */
-export const FoldkitRoot = <Model, Message>({
-  program,
-}: Readonly<{
-  program: NativeProgram<Model, Message>
-}>): React.ReactElement | null => {
-  const isReducedMotion = useReducedMotion()
-  const node = React.useSyncExternalStore(
-    program.subscribe,
-    program.getSnapshot,
-  )
-
-  React.useLayoutEffect(() => {
-    program.acknowledgeCommittedSnapshot(node)
-  }, [program, node])
-
-  return React.createElement(
+const renderRoot = <Model, Message>(
+  node: NativeNode<Message>,
+  program: NativeProgram<Model, Message>,
+  isReducedMotion: boolean,
+): React.ReactElement | null =>
+  React.createElement(
     NativeAnimationContext.Provider,
     { value: program.animationHost },
     React.createElement(
@@ -550,4 +542,60 @@ export const FoldkitRoot = <Model, Message>({
       ),
     ),
   )
+
+const NativeRoot = <Model, Message>({
+  program,
+}: Readonly<{
+  program: NativeProgram<Model, Message>
+}>): React.ReactElement | null => {
+  const isReducedMotion = useReducedMotion()
+  const node = React.useSyncExternalStore(
+    program.subscribe,
+    program.getSnapshot,
+  )
+
+  React.useLayoutEffect(() => {
+    program.acknowledgeCommittedSnapshot(node)
+  }, [program, node])
+
+  return renderRoot(node, program, isReducedMotion)
 }
+
+const InstrumentedNativeRoot = <Model, Message>({
+  program,
+  instrumentation,
+}: Readonly<{
+  program: NativeProgram<Model, Message>
+  instrumentation: NativeInstrumentation
+}>): React.ReactElement | null => {
+  const isReducedMotion = useReducedMotion()
+  const node = React.useSyncExternalStore(
+    program.subscribe,
+    program.getSnapshot,
+  )
+
+  React.useLayoutEffect(() => {
+    program.acknowledgeCommittedSnapshot(node)
+  }, [program, node])
+
+  React.useLayoutEffect(() => {
+    instrumentation.onCommit(performance.now())
+  }, [instrumentation, node])
+
+  return renderRoot(node, program, isReducedMotion)
+}
+
+/** Subscribes to native frames and renders them inside a GestureHandlerRootView. */
+export const FoldkitRoot = <Model, Message>({
+  program,
+}: Readonly<{
+  program: NativeProgram<Model, Message>
+}>): React.ReactElement | null =>
+  Option.match(program.maybeInstrumentation, {
+    onNone: () => React.createElement(NativeRoot<Model, Message>, { program }),
+    onSome: instrumentation =>
+      React.createElement(InstrumentedNativeRoot<Model, Message>, {
+        program,
+        instrumentation,
+      }),
+  })
