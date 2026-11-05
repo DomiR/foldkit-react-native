@@ -389,3 +389,24 @@ describe('strict web accessibility', () => {
     expect(element.style.display).not.toBe('contents')
   })
 })
+
+describe('strict footer elements', () => {
+  it('renders stickyFooter as a sticky footer with inherited background', () => {
+    const element = render(() => strict.stickyFooter([], ['Message composer']))
+
+    expect(element.tagName).toBe('FOOTER')
+    expect(element.style.position).toBe('sticky')
+    expect(element.style.bottom).toBe('0px')
+    expect(element.style.zIndex).toBe('1')
+    expect(element.style.backgroundColor).toBe('inherit')
+  })
+
+  it('renders footer as a plain footer without sticky positioning', () => {
+    const element = render(() => strict.footer([], ['Footer content']))
+
+    expect(element.tagName).toBe('FOOTER')
+    expect(element.style.position).toBe('relative')
+    expect(element.style.bottom).toBe('')
+    expect(element.style.zIndex).toBe('')
+  })
+})

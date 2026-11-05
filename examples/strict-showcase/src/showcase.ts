@@ -16,6 +16,7 @@ import * as Stopwatch from 'stopwatch-example/program'
 import * as Todo from 'todo-example/program'
 
 import * as Animations from './animations/program'
+import * as Chat from './chat/program'
 import * as Contacts from './contacts/program'
 import { ShowcaseNavigation } from './navigation'
 import { AppRoute, appRouteToUrl, urlToAppRoute } from './route'
@@ -28,6 +29,7 @@ export const Example = Schema.Literals([
   'Todo',
   'Form',
   'Contacts',
+  'Chat',
 ])
 export type Example = typeof Example.Type
 
@@ -45,6 +47,7 @@ export const ShowcaseRoute = defineTaggedUnion({
   Todo: { id: Schema.Number },
   Form: { id: Schema.Number },
   Contacts: { id: Schema.Number },
+  Chat: { id: Schema.Number },
 })
 export type ShowcaseRoute = typeof ShowcaseRoute.Type
 
@@ -57,6 +60,7 @@ export const Model = Schema.Struct({
   todo: Todo.Model,
   form: Form.Model,
   contacts: Contacts.Model,
+  chat: Chat.Model,
   animations: Animations.Model,
   taps: Schema.Number,
   likes: Schema.Number,
@@ -84,6 +88,7 @@ export const Message = defineMessageUnion({
   GotTodoMessage: { message: Todo.Message },
   GotFormMessage: { message: Form.Message },
   GotContactsMessage: { message: Contacts.Message },
+  GotChatMessage: { message: Chat.Message },
   GotAnimationsMessage: { message: Animations.Message },
 })
 export type Message = typeof Message.Type
@@ -105,6 +110,9 @@ export const toGotFormMessage = (message: Form.Message): Message =>
 export const toGotContactsMessage = (message: Contacts.Message): Message =>
   Message.GotContactsMessage({ message })
 
+export const toGotChatMessage = (message: Chat.Message): Message =>
+  Message.GotChatMessage({ message })
+
 export const toGotAnimationsMessage = (message: Animations.Message): Message =>
   Message.GotAnimationsMessage({ message })
 
@@ -122,6 +130,7 @@ export const init = (flags: Todo.Flags, url: Url): UpdateReturn => {
   const todoInit = Todo.init(flags)
   const formInit = Form.init()
   const contactsInit = Contacts.init()
+  const chatInit = Chat.init()
   const animationsInit = Animations.init()
 
   const commands = [
@@ -147,6 +156,7 @@ export const init = (flags: Todo.Flags, url: Url): UpdateReturn => {
     todo: todoInit.model,
     form: formInit.model,
     contacts: contactsInit.model,
+    chat: chatInit.model,
     animations: animationsInit.model,
   })
 
@@ -187,6 +197,7 @@ const exampleScreen = (example: Example, id: number): ShowcaseRoute => {
     Todo: ShowcaseRoute.Todo({ id }),
     Form: ShowcaseRoute.Form({ id }),
     Contacts: ShowcaseRoute.Contacts({ id }),
+    Chat: ShowcaseRoute.Chat({ id }),
   }
 
   return routes[example]
@@ -224,6 +235,7 @@ export const applyAppRoute = (model: Model, appRoute: AppRoute): Model =>
     Todo: () => applyExampleRoute(model, 'Todo'),
     Form: () => applyExampleRoute(model, 'Form'),
     Contacts: () => applyExampleRoute(model, 'Contacts'),
+    Chat: () => applyExampleRoute(model, 'Chat'),
     Gestures: () => modifyFields(model, { tabs: () => 'Gestures' }),
     Animations: () => modifyFields(model, { tabs: () => 'Animations' }),
     NotFound: () => model,
@@ -247,6 +259,7 @@ export const modelToAppRoute = (model: Model): AppRoute => {
     Todo: () => AppRoute.Todo(),
     Form: () => AppRoute.Form(),
     Contacts: () => AppRoute.Contacts(),
+    Chat: () => AppRoute.Chat(),
   })
 }
 
@@ -302,6 +315,13 @@ const foldContacts = Update.foldChild({
   write: (model, nextContacts) =>
     modifyFields(model, { contacts: () => nextContacts }),
   toParentMessage: toGotContactsMessage,
+})
+
+const foldChat = Update.foldChild({
+  update: Chat.update,
+  read: (model: Model) => Option.some(model.chat),
+  write: (model, nextChat) => modifyFields(model, { chat: () => nextChat }),
+  toParentMessage: toGotChatMessage,
 })
 
 const foldAnimations = Update.foldChild({
@@ -384,6 +404,7 @@ export const update = (model: Model, message: Message) =>
     GotTodoMessage: ({ message }) => foldTodo(model, message),
     GotFormMessage: ({ message }) => foldForm(model, message),
     GotContactsMessage: ({ message }) => foldContacts(model, message),
+    GotChatMessage: ({ message }) => foldChat(model, message),
     GotAnimationsMessage: ({ message }) => foldAnimations(model, message),
   })
 

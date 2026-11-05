@@ -24,6 +24,7 @@ const flags = Todo.Flags.make({ todos: Option.none() })
 const rootUrl = urlOrThrow('http://localhost/')
 const counterUrl = urlOrThrow('http://localhost/examples/counter')
 const contactsUrl = urlOrThrow('http://localhost/examples/contacts')
+const chatUrl = urlOrThrow('http://localhost/examples/chat')
 const gesturesUrl = urlOrThrow('http://localhost/gestures')
 const notFoundUrl = urlOrThrow('http://localhost/nope')
 const initialModel = init(flags, rootUrl).model
@@ -56,6 +57,17 @@ describe('routing', () => {
       ShowcaseRoute.Contacts({ id: 1 }),
     ])
     expect(contactsInit.model.nextScreenId).toBe(2)
+  })
+
+  test('initializes the Chat route from the URL', () => {
+    const chatInit = init(flags, chatUrl)
+
+    expect(chatInit.model.tabs).toBe('Examples')
+    expect(chatInit.model.stack).toStrictEqual([
+      ShowcaseRoute.Home({ id: 0 }),
+      ShowcaseRoute.Chat({ id: 1 }),
+    ])
+    expect(chatInit.model.nextScreenId).toBe(2)
   })
 
   test('does not change the Model or emit a Command for the current URL', () => {

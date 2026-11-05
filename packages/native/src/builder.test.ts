@@ -28,4 +28,14 @@ describe('makeNativeBuilder', () => {
     expect(input).toMatchObject({ tag: 'input', inputRevision: 7 })
     expect(div).not.toHaveProperty('inputRevision')
   })
+
+  it('marks sticky footers for native layout', () => {
+    const h = makeNativeBuilder()
+    const footer = h.stickyFooter([], ['Message composer'])
+
+    expect(footer).toMatchObject({
+      tag: 'footer',
+      attributes: { isStickyFooter: true },
+    })
+  })
 })

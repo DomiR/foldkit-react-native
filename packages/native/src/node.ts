@@ -40,6 +40,7 @@ export type NativeAttributes<Message> = Readonly<{
   ariaLabel?: string
   isDisabled?: boolean
   isChecked?: boolean
+  isStickyFooter?: boolean
 }>
 
 /** An attribute supplied to a native element builder. */

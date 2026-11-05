@@ -213,6 +213,7 @@ export const StrictTag = Schema.Literals([
   'img',
   'ul',
   'li',
+  'footer',
 ])
 
 /** An element name supported by both hosts. @experimental */
@@ -256,6 +257,15 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
     Readonly<{ textarea: (attributes: ReadonlyArray<Attribute>) => Node }>
 > &
   Readonly<{
+    /** A screen or tab lifts the first stickyFooter in its element tree out of
+     * the scrolling body, renders it below the body, and keeps it above the
+     * software keyboard. Use at most one per screen. Outside a screen or tab
+     * it renders as a footer element. On native, only screen and tab bodies
+     * move out of the way of the software keyboard. */
+    stickyFooter: (
+      attributes: ReadonlyArray<Attribute>,
+      children?: ReadonlyArray<Node | string | null>,
+    ) => Node
     keyed: <Tag extends StrictTag>(
       tag: Tag,
     ) => Tag extends 'textarea'

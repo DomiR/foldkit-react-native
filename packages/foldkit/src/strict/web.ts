@@ -148,6 +148,7 @@ export const toStrictHtml = <Message>(
     tag: StrictTag,
     attributes: ReadonlyArray<Attribute<Message>>,
     portableStyle: StrictStyle,
+    isStickyFooter = false,
   ): ReadonlyArray<Attribute<Message>> => {
     const isText =
       tag === 'span' ||
@@ -173,7 +174,20 @@ export const toStrictHtml = <Message>(
         ...(tag === 'textarea' ? textareaDefaults : {}),
       },
     )
-    const css = { ...style, ...toCssProperties(portableStyle) }
+    const css = {
+      ...style,
+      ...toCssProperties(portableStyle),
+      ...(isStickyFooter
+        ? {
+            position: 'sticky',
+            bottom: '0px',
+            'z-index': '1',
+            ...(portableStyle.backgroundColor === undefined
+              ? { 'background-color': 'inherit' }
+              : {}),
+          }
+        : {}),
+    }
     const isCheckbox =
       tag === 'input' &&
       attributes.some(attribute => attribute._tag === 'Checked')
@@ -205,6 +219,7 @@ export const toStrictHtml = <Message>(
     attributes: ReadonlyArray<Attribute<Message>>,
     children?: ReadonlyArray<Html | string | null>,
     key?: string,
+    isStickyFooter = false,
   ): Html => {
     const portableStyle = readPortableStyle(attributes)
     const isTransitioned =
@@ -213,7 +228,12 @@ export const toStrictHtml = <Message>(
         portableStyle.transitionDelay !== undefined ||
         portableStyle.transitionTimingFunction !== undefined) &&
       portableStyle.transitionProperty !== 'none'
-    const normalizedAttributes = attributesFor(tag, attributes, portableStyle)
+    const normalizedAttributes = attributesFor(
+      tag,
+      attributes,
+      portableStyle,
+      isStickyFooter,
+    )
     const bindings = readNavigation(attributes)
     return renderStrictElement(
       h,
@@ -248,6 +268,9 @@ export const toStrictHtml = <Message>(
     img: element('img'),
     ul: element('ul'),
     li: element('li'),
+    footer: element('footer'),
+    stickyFooter: (attributes, children) =>
+      buildElement('footer', attributes, children, undefined, true),
     keyed:
       (tag: StrictTag) =>
       (

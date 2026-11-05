@@ -9,6 +9,7 @@ export const AppRoute = defineRouteUnion({
   Todo: {},
   Form: {},
   Contacts: {},
+  Chat: {},
   Gestures: {},
   Animations: {},
   NotFound: { path: Schema.String },
@@ -51,6 +52,12 @@ export const contactsRouter = pipe(
   Route.mapTo(AppRoute.Contacts),
 )
 
+export const chatRouter = pipe(
+  literal('examples'),
+  slash(literal('chat')),
+  Route.mapTo(AppRoute.Chat),
+)
+
 export const gesturesRouter = pipe(
   literal('gestures'),
   Route.mapTo(AppRoute.Gestures),
@@ -69,6 +76,7 @@ const routeParser = Route.oneOf(
   todoRouter,
   formRouter,
   contactsRouter,
+  chatRouter,
   examplesRouter,
   gesturesRouter,
   animationsRouter,
@@ -88,6 +96,7 @@ export const appRouteToUrl = (appRoute: AppRoute): string =>
     Todo: () => todoRouter(),
     Form: () => formRouter(),
     Contacts: () => contactsRouter(),
+    Chat: () => chatRouter(),
     Gestures: () => gesturesRouter(),
     Animations: () => animationsRouter(),
     NotFound: () => examplesRouter(),

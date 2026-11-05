@@ -14,6 +14,7 @@ import {
 import { NativeAnimationContext } from './animationContext'
 import { NativeGestures } from './gestures'
 import type { NativeInstrumentation } from './instrumentation'
+import { NativeKeyboardProvider } from './keyboard'
 import { NativeList } from './list'
 import { NativeStack, NativeTabs } from './navigation'
 import type {
@@ -266,13 +267,21 @@ const renderElement = <Message,>(
 
   return Match.value(node).pipe(
     Match.withReturnType<React.ReactElement>(),
-    Match.whenOr({ tag: 'div' }, { tag: 'ul' }, { tag: 'li' }, () =>
-      onPress === undefined
-        ? renderView({ ...props, style: layoutStyle }, ...renderChildren(false))
-        : renderPressable(
-            { ...props, style: layoutStyle, onPress, disabled: isDisabled },
-            ...renderChildren(false),
-          ),
+    Match.whenOr(
+      { tag: 'div' },
+      { tag: 'ul' },
+      { tag: 'li' },
+      { tag: 'footer' },
+      () =>
+        onPress === undefined
+          ? renderView(
+              { ...props, style: layoutStyle },
+              ...renderChildren(false),
+            )
+          : renderPressable(
+              { ...props, style: layoutStyle, onPress, disabled: isDisabled },
+              ...renderChildren(false),
+            ),
     ),
     Match.whenOr(
       { tag: 'p' },
@@ -531,14 +540,16 @@ const renderRoot = <Model, Message>(
       React.createElement(
         GestureHandlerRootView,
         { style: { flex: 1 } },
-        renderNode(
-          node,
-          program.dispatch,
-          {},
-          true,
-          toReactKey(node, 0),
-          isReducedMotion,
-        ),
+        React.createElement(NativeKeyboardProvider, {
+          children: renderNode(
+            node,
+            program.dispatch,
+            {},
+            true,
+            toReactKey(node, 0),
+            isReducedMotion,
+          ),
+        }),
       ),
     ),
   )

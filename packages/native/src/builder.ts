@@ -89,6 +89,13 @@ export const makeNativeBuilder = <Message>(
     img: element('img'),
     ul: element('ul'),
     li: element('li'),
+    footer: element('footer'),
+    stickyFooter: (attributes, children) =>
+      buildElement(
+        'footer',
+        [...attributes, { isStickyFooter: true }],
+        children,
+      ),
     keyed:
       (tag: NativeTag) =>
       (
