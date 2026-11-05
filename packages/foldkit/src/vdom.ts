@@ -1,5 +1,11 @@
 import { Option } from 'effect'
 
+import {
+  beginImmediateExitWindow,
+  endImmediateExitWindow,
+  exitModule,
+  finishPendingExits,
+} from './exitModule.js'
 import { onUnmountModule } from './onUnmountModule.js'
 import { propsModule } from './propsModule.js'
 import {
@@ -30,6 +36,7 @@ export const patch = init([
   datasetModule,
   eventListenersModule,
   onUnmountModule,
+  exitModule,
   propsModule,
   styleModule,
 ])
@@ -180,10 +187,16 @@ export const __patchVNode = (
 }
 
 export const __recoverVNodeAfterPatchFailure = (currentVNode: VNode): VNode => {
+  finishPendingExits()
   const currentElement = currentVNode.elm
-  const recoveryVNode = patch(currentVNode, h('!'))
-  if (recoveryVNode.elm !== currentElement && currentElement?.parentNode) {
-    currentElement.parentNode.removeChild(currentElement)
+  beginImmediateExitWindow()
+  try {
+    const recoveryVNode = patch(currentVNode, h('!'))
+    if (recoveryVNode.elm !== currentElement && currentElement?.parentNode) {
+      currentElement.parentNode.removeChild(currentElement)
+    }
+    return recoveryVNode
+  } finally {
+    endImmediateExitWindow()
   }
-  return recoveryVNode
 }

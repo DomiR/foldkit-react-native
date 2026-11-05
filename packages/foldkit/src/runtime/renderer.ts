@@ -1,6 +1,11 @@
 import { Cause, Context, Effect, Exit, Option, type Scope } from 'effect'
 
 import {
+  beginImmediateExitWindow,
+  endImmediateExitWindow,
+  finishPendingExits,
+} from '../exitModule.js'
+import {
   type BoundaryRegistry,
   type Document,
   type HtmlBuilder,
@@ -262,11 +267,13 @@ export const makeRenderer = <Model, Message>({
         if (!Exit.hasInterrupts(exit)) {
           return
         }
-        const maybeCurrentVNode = vnodeSlot.maybeCurrentVNode
-        yield* Option.match(maybeCurrentVNode, {
-          onNone: () => Effect.void,
-          onSome: currentVNode =>
-            Effect.sync(() => {
+        yield* Effect.sync(() => {
+          finishPendingExits()
+          beginImmediateExitWindow()
+          try {
+            const maybeCurrentVNode = vnodeSlot.maybeCurrentVNode
+            if (Option.isSome(maybeCurrentVNode)) {
+              const currentVNode = maybeCurrentVNode.value
               const placeholderNode = __patchVNode(
                 Option.some(currentVNode),
                 null,
@@ -279,7 +286,10 @@ export const makeRenderer = <Model, Message>({
                 )
                 container.replaceChildren()
               }
-            }),
+            }
+          } finally {
+            endImmediateExitWindow()
+          }
         })
       }),
     )
@@ -304,6 +314,7 @@ export const makeRenderer = <Model, Message>({
           return
         }
         status.isCrashed = true
+        finishPendingExits()
         // NOTE: the crash view should appear at once, not animate in from
         // a snapshot of the state that crashed.
         skipPendingViewTransition()
@@ -311,13 +322,18 @@ export const makeRenderer = <Model, Message>({
         const squashed = Cause.squash(cause)
         const error =
           squashed instanceof Error ? squashed : new Error(String(squashed))
-        renderCrashView(
-          { error, model, message: maybeMessage },
-          crash,
-          container,
-          vnodeSlot,
-          applyMetadata,
-        )
+        beginImmediateExitWindow()
+        try {
+          renderCrashView(
+            { error, model, message: maybeMessage },
+            crash,
+            container,
+            vnodeSlot,
+            applyMetadata,
+          )
+        } finally {
+          endImmediateExitWindow()
+        }
         settlePendingCommit()
       })
 

@@ -92,7 +92,9 @@ const bodyStyle: Record<string, string> = {
  * Portable transitions use CSS transitions and Entering uses CSS keyframes, both
  * with reduced-motion support.
  * Web animation Commands resolve at their target when reduced motion is active.
- * Exiting does not delay web element removal.
+ * Removed elements with Exiting stay inert until their exit keyframes end.
+ * Reduced motion and DevTools replay remove them at once. Re-adding the same
+ * key while its ghost exits renders a new element beside the ghost, as on native.
  * @experimental The strict adapter contract may change between releases. */
 export const toStrictHtml = <Message>(
   h: HtmlBuilder<Message>,

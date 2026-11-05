@@ -24,6 +24,11 @@ import {
   normalizedStyleProperties,
   reflectedAttributeName,
 } from '../domReflection.js'
+import {
+  beginImmediateExitWindow,
+  endImmediateExitWindow,
+  finishPendingExits,
+} from '../exitModule.js'
 import type { File } from '../file/index.js'
 import { isImeCompositionKeydown } from '../imeComposition.js'
 import type { MountAction } from '../mount/index.js'
@@ -546,11 +551,19 @@ const onMountStates = new WeakMap<Element, OnMountState>()
  *  afterward, so the `OnUnmount` module can defer live callbacks while the
  *  replayed tree is patched in. Without the gate the callback would
  *  enqueue a hygiene Message into live history during mere inspection of past
- *  state. */
-export const __beginReplayRender = beginReplayUnmountRender
+ *  state. Replay renders also finish in-flight exit animations first and
+ *  remove elements without animating them. */
+export const __beginReplayRender = (): void => {
+  finishPendingExits()
+  beginImmediateExitWindow()
+  beginReplayUnmountRender()
+}
 
 /** Closes the replay-render window opened by {@link __beginReplayRender}. */
-export const __endReplayRender = endReplayUnmountRender
+export const __endReplayRender = (): void => {
+  endImmediateExitWindow()
+  endReplayUnmountRender()
+}
 
 /** Dispatches the live `OnUnmount` callbacks deferred by a replay patch that
  *  failed and forced the runtime to discard the damaged DOM. */
