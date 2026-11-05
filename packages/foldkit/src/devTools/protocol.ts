@@ -253,6 +253,15 @@ export const EventFrame = Schema.Struct({
 /** A wire frame carrying a runtime lifecycle event. */
 export type EventFrame = typeof EventFrame.Type
 
+/** A transport-neutral envelope for native DevTools sockets. */
+export const DevToolsEnvelope = defineTaggedUnion({
+  Request: { frame: RequestFrame },
+  Response: { frame: ResponseFrame },
+  Event: { frame: EventFrame },
+})
+/** A decoded transport-neutral DevTools socket envelope. */
+export type DevToolsEnvelope = typeof DevToolsEnvelope.Type
+
 // RELAY REGISTRY
 
 /** Increment when the relay record's wire format changes. */

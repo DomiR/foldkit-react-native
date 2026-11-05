@@ -49,7 +49,11 @@
   },
   "overrides": [
     {
-      "files": ["packages/foldkit/src/**/*.ts"],
+      "files": [
+        "packages/foldkit/src/**/*.ts",
+        "packages/native/src/**/*.ts",
+        "packages/native/src/**/*.tsx"
+      ],
       "rules": {
         "typescript/no-explicit-any": "off",
         "foldkit/no-module-level-mutable-state": "off"

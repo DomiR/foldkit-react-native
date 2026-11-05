@@ -1,4 +1,5 @@
 export {
+  DevToolsEnvelope,
   DiffValue,
   Event,
   EventFrame,
