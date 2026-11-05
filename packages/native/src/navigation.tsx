@@ -6,11 +6,18 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from 'react-native'
+import type { HostInstance } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated'
 import { ScreenStack, ScreenStackItem, Tabs } from 'react-native-screens'
 import { SafeAreaView } from 'react-native-screens/experimental'
 
 import { collectNativeAttributes } from './builder'
+import { useKeyboardHeight } from './keyboard'
 import { ListScrollContext } from './list'
 import type {
   NativeAttributes,
@@ -18,6 +25,7 @@ import type {
   NativeNode,
   NativeTab,
 } from './node'
+import { liftStickyFooter } from './stickyFooter'
 import { useAndroidTabIcons } from './tabIcons'
 
 type StackNode<Message> = Extract<
@@ -60,6 +68,48 @@ const containsList = <Message,>(
 
 const NavigationBackgroundContext = React.createContext('#ffffff')
 
+const KeyboardColumn = ({
+  children,
+  footer,
+  isActive,
+}: Readonly<{
+  children: React.ReactNode
+  footer: React.ReactNode
+  isActive: boolean
+}>): React.ReactElement => {
+  const keyboardHeight = useKeyboardHeight()
+  const bottomGap = useSharedValue(0)
+  const columnRef = React.useRef<HostInstance>(null)
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions()
+  const measureBottomGap = React.useCallback(() => {
+    columnRef.current?.measureInWindow((_x, y, _width, height) => {
+      bottomGap.value = Math.max(0, windowHeight - y - height)
+    })
+  }, [bottomGap, windowHeight])
+
+  React.useLayoutEffect(measureBottomGap, [
+    measureBottomGap,
+    windowWidth,
+    isActive,
+  ])
+
+  const keyboardStyle = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(0, keyboardHeight.value - bottomGap.value),
+  }))
+
+  return (
+    <Animated.View
+      ref={columnRef}
+      collapsable={false}
+      onLayout={measureBottomGap}
+      style={[styles.fill, keyboardStyle]}
+    >
+      <View style={styles.fill}>{children}</View>
+      {footer}
+    </Animated.View>
+  )
+}
+
 const NavigationBody = <Message,>({
   attributes,
   children,
@@ -85,43 +135,65 @@ const NavigationBody = <Message,>({
     )
   }
 
-  if (containsList(children)) {
-    return (
-      <ListScrollContext.Provider
-        value={{
-          contentInsetAdjustmentBehavior: isStackScreen ? 'never' : 'automatic',
-        }}
-      >
-        <View style={styles.fill}>
-          {renderContent(
-            {
-              ...attributes,
-              style: { ...contentStyle, flex: 1, minHeight: 0 },
-            },
-            children,
-            isActive,
-          )}
-        </View>
-      </ListScrollContext.Provider>
-    )
-  }
+  const maybeFooterLift = liftStickyFooter(children)
+  const bodyChildren = Option.match(maybeFooterLift, {
+    onNone: () => children,
+    onSome: footerLift => footerLift.children,
+  })
+  const isKeyboardColumn =
+    Platform.OS === 'android' || Option.isSome(maybeFooterLift)
 
   // NOTE: RN keyboard adjustment clamps against contentInset, excluding automatic
   // header insets. Stack screens apply safe-area spacing outside the ScrollView.
-  return (
+  const body = containsList(bodyChildren) ? (
+    <ListScrollContext.Provider
+      value={{
+        contentInsetAdjustmentBehavior: isStackScreen ? 'never' : 'automatic',
+        automaticallyAdjustKeyboardInsets: !isKeyboardColumn,
+      }}
+    >
+      <View style={styles.fill}>
+        {renderContent(
+          {
+            ...attributes,
+            style: { ...contentStyle, flex: 1, minHeight: 0 },
+          },
+          bodyChildren,
+          isActive,
+        )}
+      </View>
+    </ListScrollContext.Provider>
+  ) : (
     <ScrollView
       style={styles.fill}
       contentContainerStyle={styles.content}
       removeClippedSubviews={false}
-      automaticallyAdjustKeyboardInsets
+      automaticallyAdjustKeyboardInsets={!isKeyboardColumn}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
       contentInsetAdjustmentBehavior={isStackScreen ? 'never' : 'automatic'}
       automaticallyAdjustsScrollIndicatorInsets
     >
-      {renderContent({ ...attributes, style }, children, isActive)}
+      {renderContent({ ...attributes, style }, bodyChildren, isActive)}
     </ScrollView>
   )
+
+  if (isKeyboardColumn) {
+    return (
+      <KeyboardColumn
+        isActive={isActive}
+        footer={Option.match(maybeFooterLift, {
+          onNone: () => null,
+          onSome: footerLift =>
+            renderContent({}, [footerLift.footer], isActive),
+        })}
+      >
+        {body}
+      </KeyboardColumn>
+    )
+  } else {
+    return body
+  }
 }
 
 const styles = StyleSheet.create({

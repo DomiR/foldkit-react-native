@@ -13,6 +13,7 @@ import { strictView as stopwatchView } from 'stopwatch-example/strictView'
 import { strictView as todoView } from 'todo-example/strictView'
 
 import { strictView as animationsView } from './animations/strictView'
+import { strictView as chatView } from './chat/strictView'
 import { strictView as contactsView } from './contacts/strictView'
 import {
   Example,
@@ -20,6 +21,7 @@ import {
   type Model,
   ShowcaseRoute,
   toGotAnimationsMessage,
+  toGotChatMessage,
   toGotContactsMessage,
   toGotCounterMessage,
   toGotFormMessage,
@@ -71,6 +73,7 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
       Form: () => formView(model.form, mapMessages(h, toGotFormMessage)),
       Contacts: () =>
         contactsView(model.contacts, mapMessages(h, toGotContactsMessage)),
+      Chat: () => chatView(model.chat, mapMessages(h, toGotChatMessage)),
     })
   const titleForRoute = (route: ShowcaseRoute): string =>
     ShowcaseRoute.match(route, {
@@ -80,6 +83,7 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
       Todo: () => 'Todo',
       Form: () => 'Form',
       Contacts: () => 'Contacts',
+      Chat: () => 'Chat',
     })
   const gesturesView = () =>
     h.div(

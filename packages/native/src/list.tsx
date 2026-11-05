@@ -14,8 +14,14 @@ type ListNode<Message> = Extract<
 
 /** Supplies the navigation body's inset policy to its scrolling list. @internal */
 export const ListScrollContext = React.createContext<
-  Readonly<{ contentInsetAdjustmentBehavior: 'automatic' | 'never' }>
->({ contentInsetAdjustmentBehavior: 'automatic' })
+  Readonly<{
+    contentInsetAdjustmentBehavior: 'automatic' | 'never'
+    automaticallyAdjustKeyboardInsets: boolean
+  }>
+>({
+  contentInsetAdjustmentBehavior: 'automatic',
+  automaticallyAdjustKeyboardInsets: true,
+})
 
 /** Virtualizes keyed rows and reports active end-of-list events as Messages. @internal */
 export const NativeList = <Message,>({
@@ -33,7 +39,8 @@ export const NativeList = <Message,>({
 }>): React.ReactElement => {
   const { attributes, rows, itemHeight, maintainVisibleContentPosition } = node
   const { ariaLabel, onEndReached } = attributes
-  const { contentInsetAdjustmentBehavior } = React.useContext(ListScrollContext)
+  const { contentInsetAdjustmentBehavior, automaticallyAdjustKeyboardInsets } =
+    React.useContext(ListScrollContext)
 
   // NOTE: Rows and extraData change each frame so memoized cells receive
   // row thunks that close over the latest Model.
@@ -64,7 +71,7 @@ export const NativeList = <Message,>({
       initialNumToRender={INITIAL_NUM_TO_RENDER}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
-      automaticallyAdjustKeyboardInsets
+      automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
       automaticallyAdjustsScrollIndicatorInsets
       contentInsetAdjustmentBehavior={contentInsetAdjustmentBehavior}
       accessibilityLabel={ariaLabel}
