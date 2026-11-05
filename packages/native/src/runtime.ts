@@ -10,6 +10,7 @@ import {
 } from 'effect'
 import type { Update } from 'foldkit'
 import type { ManagedResources } from 'foldkit/managedResource'
+import type { RoutingConfig } from 'foldkit/runtime'
 import {
   makeRuntimeCore,
   type RuntimeCrashConfig,
@@ -21,38 +22,34 @@ import type {
   StrictView,
 } from 'foldkit/strict'
 import type { Subscriptions } from 'foldkit/subscription'
+import type { Url } from 'foldkit/url'
 
 import {
   makeNativeAnimationHost,
   type NativeAnimationHost,
 } from './animationHost'
 import { type NativeBuilder, makeNativeBuilder } from './builder'
-import { makeNativeHost } from './host'
+import { makeNativeHost, rootUrl } from './host'
 import {
   isDevelopment,
   registerProgram,
   takeOverProgram,
 } from './modelPreservation'
+import { type NativeLinking, expoLinking } from './linking'
 import type { NativeNode } from './node'
 
 type NativeAnimationServices = AnimatedValues | BackgroundRuntime
 
-/** The shared Elm Architecture program and its native view. */
-export type NativeProgramConfig<
+type NativeProgramBaseConfig<
   Model,
   Message,
-  Resources = never,
-  ManagedResourceServices = never,
+  Resources,
+  ManagedResourceServices,
 > = Readonly<{
   /** Omit the Schema for an opaque in-memory Model. Development Fast Refresh
    * encodes and decodes the Model synchronously, so the Schema must require
    * no decoding or encoding services. */
   Model?: Schema.Codec<Model, any, never, never>
-  init: () => Update.Return<
-    Model,
-    Message,
-    Resources | NativeAnimationServices | ManagedResourceServices
-  >
   update: (
     model: Model,
     message: Message,
@@ -78,7 +75,42 @@ export type NativeProgramConfig<
    * ManagedResource finalizers can run after the new program has started. */
   id?: string
   animationHost?: NativeAnimationHost
+  linking?: NativeLinking
 }>
+
+/** The shared Elm Architecture program and its native view. Configure routing
+ * to pass the current Url to `init` and receive native deep-link changes. */
+export type NativeProgramConfig<
+  Model,
+  Message,
+  Resources = never,
+  ManagedResourceServices = never,
+> = NativeProgramBaseConfig<
+  Model,
+  Message,
+  Resources,
+  ManagedResourceServices
+> &
+  (
+    | Readonly<{
+        routing: RoutingConfig<Message>
+        init: (
+          url: Url,
+        ) => Update.Return<
+          Model,
+          Message,
+          Resources | NativeAnimationServices | ManagedResourceServices
+        >
+      }>
+    | Readonly<{
+        routing?: undefined
+        init: () => Update.Return<
+          Model,
+          Message,
+          Resources | NativeAnimationServices | ManagedResourceServices
+        >
+      }>
+  )
 
 /** A native node store driven by Foldkit's runtime core. `getModel` reads live
  * state, while `getSnapshot` and `render` read the latest published frame. */
@@ -97,8 +129,10 @@ export type NativeProgram<Model, Message> = Readonly<{
 let nextRuntimeId = 0
 
 /** Creates a native program using Foldkit's scoped Message queue, Commands,
- * Subscriptions, and ManagedResources. The animation host's Layer is provided
- * alongside application resources. `dispose` interrupts its runtime fiber. */
+ * Subscriptions, and ManagedResources. When routing is configured, `init`
+ * receives the current Url and native deep-link changes dispatch
+ * `routing.onUrlChange`. The animation host's Layer is provided alongside
+ * application resources. `dispose` interrupts its runtime fiber. */
 export const makeNativeProgram = <
   Model,
   Message,
@@ -125,6 +159,13 @@ export const makeNativeProgram = <
     animationHost.layer,
     ...Array.fromOption(Option.fromNullishOr(config.resources)),
   )
+  const init = (_flags: void, url?: Url) => {
+    if (config.routing) {
+      return config.init(url ?? rootUrl)
+    }
+
+    return config.init()
+  }
   const listeners = new Set<() => void>()
   let snapshot = h.div([])
   let maybeReadLiveModel = Option.none<() => Model>()
@@ -301,7 +342,7 @@ export const makeNativeProgram = <
     Flags: Schema.Void,
     configuredFlags: Option.none(),
     isFlagsRequired: false,
-    init: config.init,
+    init,
     update: config.update,
     ...(config.subscriptions && { subscriptions: config.subscriptions }),
     ...(config.managedResources && {
@@ -311,7 +352,8 @@ export const makeNativeProgram = <
     ...(config.crash && { crash: config.crash }),
     devTools: false,
     renderer,
-    host: makeNativeHost<Message>(),
+    ...(config.routing && { routing: config.routing }),
+    host: makeNativeHost<Message>(config.linking ?? expoLinking),
   })
   const maybePreservedModel = Option.isSome(maybeModelPreservation)
     ? takeOverProgram(id, animationHost)

@@ -1,15 +1,43 @@
 import { Effect, Function, Option, Schema } from 'effect'
 import type { RuntimeHost } from 'foldkit/runtime-core'
+import type { Url } from 'foldkit/url'
 
-/** Creates native platform services without routing or development reloads. */
-export const makeNativeHost = <Message>(): RuntimeHost<Message> => ({
+import { deepLinkToUrl } from './deepLink'
+import type { NativeLinking } from './linking'
+
+/** The root URL used when native linking has no parseable launch URL. */
+export const rootUrl: Url = {
+  protocol: '',
+  host: '',
+  port: Option.none<string>(),
+  pathname: '/',
+  search: Option.none<string>(),
+  hash: Option.none<string>(),
+}
+
+/** Creates native platform services with optional deep-link navigation.
+ * A URL event arriving between the launch URL read and listener registration
+ * is not delivered by the host. With `expoLinking`, an asynchronously reported
+ * launch URL is delivered through the listener. */
+export const makeNativeHost = <Message>(
+  linking: NativeLinking,
+): RuntimeHost<Message> => ({
   isDevelopment: false,
   isDevToolsDevelopment: () => false,
   validateRuntime: Effect.void,
   resolvePreservedModel: Effect.succeed(undefined),
   provideScheduler: Function.identity,
-  currentUrl: Option.none,
-  addNavigationListeners: () => Function.constVoid,
+  currentUrl: () =>
+    Option.orElse(Option.flatMap(linking.initialUrl(), deepLinkToUrl), () =>
+      Option.some(rootUrl),
+    ),
+  addNavigationListeners: (enqueueMessage, routing) =>
+    linking.addUrlListener(rawUrl => {
+      const maybeUrl = deepLinkToUrl(rawUrl)
+      if (Option.isSome(maybeUrl)) {
+        enqueueMessage(routing.onUrlChange(maybeUrl.value))
+      }
+    }),
   resolveBoot: ({
     bootMode,
     bootFlags,
