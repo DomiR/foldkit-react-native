@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { FakeWebSocket } from './nativeFixtures'
@@ -24,6 +25,9 @@ vi.mock('react-native-worklets', () => ({
 
 beforeEach(() => {
   vi.stubGlobal('__DEV__', false)
+  vi.mocked(Linking.getLinkingURL).mockReset().mockReturnValue(null)
+  vi.mocked(Linking.getInitialURL).mockReset().mockResolvedValue(null)
+  vi.mocked(Linking.addEventListener).mockClear()
   FakeWebSocket.sockets = []
 })
 

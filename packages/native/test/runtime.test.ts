@@ -1,4 +1,5 @@
 import { Array, Effect, Number, Option, Schema } from 'effect'
+import * as Linking from 'expo-linking'
 import { Command, type Update } from 'foldkit'
 import {
   DevToolsEnvelope,
@@ -7,7 +8,9 @@ import {
   type Response,
 } from 'foldkit/devtools-protocol'
 import { defineMessageUnion } from 'foldkit/message'
+import { UrlRequest } from 'foldkit/navigation'
 import { modifyFields } from 'foldkit/struct'
+import { Url } from 'foldkit/url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { NativeBuilder } from '../src/builder'
@@ -30,6 +33,8 @@ const Message = defineMessageUnion({
   ClickedIncrement: {},
   ClickedCrash: {},
   CompletedWaitForIncrement: {},
+  ChangedUrl: { url: Url },
+  ClickedLink: { request: UrlRequest },
 })
 type Message = typeof Message.Type
 type NonRoutingProgramConfig = Extract<
@@ -60,6 +65,8 @@ const update = (model: Model, message: Message) =>
     ClickedCrash: () => {
       throw new Error('Counter crashed')
     },
+    ChangedUrl: () => ({ model }),
+    ClickedLink: () => ({ model }),
   })
 
 const view = (model: Model, h: NativeBuilder<Message>) =>
@@ -95,7 +102,10 @@ const makeRuntimeFixture = () => {
 
   const flushMessages = () => vi.advanceTimersByTimeAsync(DRAIN_TURN_MS)
 
-  const startProgram = async (config: NativeProgramConfig<Model, Message>) => {
+  const startProgram = async (
+    config: NativeProgramConfig<Model, Message>,
+    expectedCount = 0,
+  ) => {
     const program = makeNativeProgram({
       id: `native-runtime-test-${programs.length}`,
       ...config,
@@ -104,8 +114,8 @@ const makeRuntimeFixture = () => {
 
     await vi.waitFor(
       () => {
-        expect(program.getModel()).toEqual({ count: 0 })
-        expectCount(program, 0)
+        expect(program.getModel()).toEqual({ count: expectedCount })
+        expectCount(program, expectedCount)
       },
       { interval: DRAIN_TURN_MS, timeout: BOOT_TIMEOUT_MS },
     )
@@ -113,9 +123,7 @@ const makeRuntimeFixture = () => {
     return program
   }
 
-  const createProgram = (
-    overrides: Partial<NonRoutingProgramConfig> = {},
-  ) =>
+  const createProgram = (overrides: Partial<NonRoutingProgramConfig> = {}) =>
     startProgram({
       Model,
       init: () => ({ model: Model.make({ count: 0 }) }),
@@ -209,6 +217,81 @@ beforeEach(() => {
   vi.stubGlobal('__DEV__', true)
   vi.stubGlobal('WebSocket', FakeWebSocket)
   vi.spyOn(Math, 'random').mockReturnValue(0)
+})
+
+describe('native routing across Fast Refresh', () => {
+  beforeEach(() => {
+    vi.mocked(Linking.getLinkingURL).mockReturnValue(
+      'foldkit://examples/contacts',
+    )
+    vi.mocked(Linking.getInitialURL).mockResolvedValue(
+      'foldkit://examples/counter',
+    )
+  })
+
+  const makeRoutedConfig = () => ({
+    id: 'native-routing-test',
+    Model,
+    init: vi.fn((_url: Url) => ({ model: Model.make({ count: 0 }) })),
+    update,
+    view,
+    routing: {
+      onUrlChange: vi.fn((url: Url) => Message.ChangedUrl({ url })),
+      onUrlRequest: (request: UrlRequest) => Message.ClickedLink({ request }),
+    },
+  })
+
+  testRuntime(
+    'delivers the asynchronous launch URL once on cold start',
+    async native => {
+      const config = makeRoutedConfig()
+      await native.startProgram(config)
+      await native.flushMessages()
+
+      expect(config.init).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ pathname: '/examples/contacts' }),
+      )
+      expect(config.routing.onUrlChange).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ pathname: '/examples/counter' }),
+      )
+      expect(Linking.getInitialURL).toHaveBeenCalledOnce()
+    },
+  )
+
+  testRuntime(
+    'subscribes only to incoming URLs after restoring a Model',
+    async native => {
+      const config = makeRoutedConfig()
+      const previousProgram = await native.startProgram(config)
+      expect(config.routing.onUrlChange).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ pathname: '/examples/counter' }),
+      )
+
+      previousProgram.dispatch(Message.ClickedIncrement())
+      await native.flushAnimationFrames()
+      config.routing.onUrlChange.mockClear()
+
+      const program = await native.startProgram(config, 1)
+      await native.flushMessages()
+
+      expect(config.init).toHaveBeenCalledOnce()
+      expect(config.routing.onUrlChange).not.toHaveBeenCalled()
+      expect(Linking.getInitialURL).toHaveBeenCalledOnce()
+      expect(Linking.addEventListener).toHaveBeenCalledTimes(2)
+      expect(program.getModel().count).toBe(1)
+
+      const [, onUrl] = Option.getOrThrow(
+        Array.last(vi.mocked(Linking.addEventListener).mock.calls),
+      )
+      onUrl({ url: 'foldkit://examples/todo' })
+      await native.flushMessages()
+
+      expect(config.routing.onUrlChange).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ pathname: '/examples/todo' }),
+      )
+      expect(program.getModel().count).toBe(1)
+    },
+  )
 })
 
 describe('native DevTools runtime', () => {

@@ -20,9 +20,11 @@ export const rootUrl: Url = {
 /** Creates native platform services with optional deep-link navigation.
  * A URL event arriving between the launch URL read and listener registration
  * is not delivered by the host. With `expoLinking`, an asynchronously reported
- * launch URL is delivered through the listener. */
+ * launch URL is delivered through the listener when `isLaunchUrlReplayed` is
+ * true. Set it to false when starting from a preserved Model. */
 export const makeNativeHost = <Message>(
   linking: NativeLinking,
+  { isLaunchUrlReplayed }: Readonly<{ isLaunchUrlReplayed: boolean }>,
   maybeDevTools: Option.Option<ResolvedNativeDevTools<Message>> = Option.none(),
 ): RuntimeHost<Message> => ({
   isDevelopment: false,
@@ -35,12 +37,15 @@ export const makeNativeHost = <Message>(
       Option.some(rootUrl),
     ),
   addNavigationListeners: (enqueueMessage, routing) =>
-    linking.addUrlListener(rawUrl => {
-      const maybeUrl = deepLinkToUrl(rawUrl)
-      if (Option.isSome(maybeUrl)) {
-        enqueueMessage(routing.onUrlChange(maybeUrl.value))
-      }
-    }),
+    linking.addUrlListener(
+      rawUrl => {
+        const maybeUrl = deepLinkToUrl(rawUrl)
+        if (Option.isSome(maybeUrl)) {
+          enqueueMessage(routing.onUrlChange(maybeUrl.value))
+        }
+      },
+      { isLaunchUrlReplayed },
+    ),
   resolveBoot: ({
     bootMode,
     bootFlags,

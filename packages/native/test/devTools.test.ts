@@ -52,7 +52,11 @@ describe('native DevTools options', () => {
       excludeFromHistory: ['CompletedTick'],
     })
     expect(Option.getOrThrow(resolved.maybeMessageSchema)).toBe(Message)
-    const host = makeNativeHost(expoLinking, maybeResolved)
+    const host = makeNativeHost(
+      expoLinking,
+      { isLaunchUrlReplayed: true },
+      maybeResolved,
+    )
     expect(host.isDevelopment).toBe(false)
     expect(host.isDevToolsDevelopment()).toBe(true)
   })
@@ -103,6 +107,10 @@ describe('native DevTools options', () => {
     vi.stubGlobal('__DEV__', undefined)
     expect(Option.isNone(resolveNativeDevTools({}, 'ios'))).toBe(true)
     expect(warn).not.toHaveBeenCalled()
-    expect(makeNativeHost(expoLinking).isDevToolsDevelopment()).toBe(false)
+    expect(
+      makeNativeHost(expoLinking, {
+        isLaunchUrlReplayed: true,
+      }).isDevToolsDevelopment(),
+    ).toBe(false)
   })
 })

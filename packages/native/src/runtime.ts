@@ -478,6 +478,10 @@ export const makeNativeProgram = <
       }
     })
 
+  const maybePreservedModel = Option.isSome(maybeModelPreservation)
+    ? takeOverProgram(id, animationHost)
+    : Option.none<unknown>()
+
   const runtime = makeRuntimeCore({
     runtimeId: `native-${nextRuntimeId++}`,
     kind: 'Element',
@@ -497,11 +501,12 @@ export const makeNativeProgram = <
     devTools: Option.isSome(maybeDevTools) ? maybeDevTools.value.config : false,
     renderer,
     ...(config.routing && { routing: config.routing }),
-    host: makeNativeHost(config.linking ?? expoLinking, maybeDevTools),
+    host: makeNativeHost(
+      config.linking ?? expoLinking,
+      { isLaunchUrlReplayed: Option.isNone(maybePreservedModel) },
+      maybeDevTools,
+    ),
   })
-  const maybePreservedModel = Option.isSome(maybeModelPreservation)
-    ? takeOverProgram(id, animationHost)
-    : Option.none<unknown>()
   const fiber = Effect.runFork(
     runtime.start(Option.getOrUndefined(maybePreservedModel)),
   )
