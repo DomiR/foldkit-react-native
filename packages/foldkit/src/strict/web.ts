@@ -15,6 +15,7 @@ import type {
 } from './strict.js'
 import type { WebAnimationHost } from './webAnimation.js'
 import { renderStrictElement } from './webBindings.js'
+import { renderStrictList } from './webList.js'
 import { toCssProperties } from './webStyle.js'
 
 type NavigationAttributes<Message> = Readonly<{
@@ -28,6 +29,7 @@ type NavigationAttributes<Message> = Readonly<{
   entering?: StrictLayoutAnimation
   exiting?: StrictLayoutAnimation
   onTransitionEnd?: Message
+  onEndReached?: Message
 }>
 
 const layoutDefaults: Record<string, string> = {
@@ -235,6 +237,14 @@ export const toStrictHtml = <Message>(
         children?: ReadonlyArray<Html | string | null>,
       ): Html =>
         buildElement(tag, attributes, children, key),
+    list: (attributes, list) =>
+      renderStrictList(
+        h,
+        builder,
+        attributes,
+        list,
+        readNavigation(attributes).onEndReached,
+      ),
     screen: (key, attributes, children = []) => ({ key, attributes, children }),
     tab: (key, attributes, children = []) => ({ key, attributes, children }),
     stack: (attributes, screens) =>
@@ -385,6 +395,7 @@ export const toStrictHtml = <Message>(
       return attribute
     },
     OnClick: h.OnClick,
+    OnEndReached: onEndReached => navigationAttribute({ onEndReached }),
     OnInput: h.OnInput,
     OnSubmitEditing: message => {
       const attribute = h.OnKeyDownPreventDefault(key =>

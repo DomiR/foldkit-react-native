@@ -27,6 +27,7 @@ export const mapMessages = <Message, ParentMessage, Node, Attribute>(
 ): StrictHtmlBuilder<Message, Node, Attribute> => ({
   ...h,
   OnClick: message => h.OnClick(toParentMessage(message)),
+  OnEndReached: message => h.OnEndReached(toParentMessage(message)),
   OnInput: toMessage => h.OnInput(value => toParentMessage(toMessage(value))),
   OnSubmitEditing: message => h.OnSubmitEditing(toParentMessage(message)),
   OnTransitionEnd: message => h.OnTransitionEnd(toParentMessage(message)),

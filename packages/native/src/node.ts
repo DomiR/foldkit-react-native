@@ -32,6 +32,7 @@ export type NativeAttributes<Message> = Readonly<{
   onInput?: (value: string) => Message
   onSubmitEditing?: Message
   rows?: number
+  onEndReached?: Message
   value?: string
   placeholder?: string
   src?: string
@@ -50,6 +51,12 @@ type NativeNodeIdentity = {
   identity?: string
 }
 
+/** A keyed row whose view is built when the native list renders it. */
+export type NativeListRow<Message> = Readonly<{
+  key: string
+  render: () => NativeNode<Message>
+}>
+
 /** A native element or an explicitly empty view. */
 export type NativeNode<Message> =
   | (Readonly<{
@@ -59,6 +66,15 @@ export type NativeNode<Message> =
       key: string | undefined
       attributes: NativeAttributes<Message>
       children: ReadonlyArray<NativeChild<Message>>
+    }> &
+      NativeNodeIdentity)
+  | (Readonly<{
+      _tag: 'List'
+      key: string | undefined
+      attributes: NativeAttributes<Message>
+      rows: ReadonlyArray<NativeListRow<Message>>
+      itemHeight?: number
+      maintainVisibleContentPosition?: boolean
     }> &
       NativeNodeIdentity)
   | (Readonly<{

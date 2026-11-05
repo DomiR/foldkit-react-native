@@ -1,7 +1,7 @@
 import { Predicate } from 'effect'
 
 type BrandableNativeNode = Record<string, unknown> & {
-  _tag: 'Element' | 'Stack' | 'Tabs'
+  _tag: 'Element' | 'List' | 'Stack' | 'Tabs'
   identity?: string
 }
 
@@ -33,6 +33,12 @@ const isBrandableNativeNode = (
       hasOwnProperty(value, 'children') &&
       hasOwnProperty(value, 'key')
     )
+  } else if (value['_tag'] === 'List') {
+    return (
+      hasOwnProperty(value, 'key') &&
+      hasOwnProperty(value, 'attributes') &&
+      hasOwnProperty(value, 'rows')
+    )
   } else if (value['_tag'] === 'Stack') {
     return (
       hasOwnProperty(value, 'attributes') && hasOwnProperty(value, 'screens')
@@ -51,7 +57,8 @@ const stampIdentity = (target: BrandableNativeNode, identity: string): void => {
 }
 
 /**
- * Stamps a framework-managed identity onto a native view result.
+ * Stamps a framework-managed identity onto a native Element, List, Stack, or
+ * Tabs view result.
  *
  * Identity is the renderer's second axis, independent of user-facing keys:
  * it answers which view function produced this node rather than which sibling

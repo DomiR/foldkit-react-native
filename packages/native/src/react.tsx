@@ -12,6 +12,7 @@ import {
 } from './animated'
 import { NativeAnimationContext } from './animationContext'
 import { NativeGestures } from './gestures'
+import { NativeList } from './list'
 import { NativeStack, NativeTabs } from './navigation'
 import type {
   NativeAttributes,
@@ -31,7 +32,8 @@ const toReactKey = <Message,>(
   ordinal: number,
 ): string | undefined => {
   const identity = node._tag === 'Empty' ? undefined : node.identity
-  const userKey = node._tag === 'Element' ? node.key : undefined
+  const userKey =
+    node._tag === 'Element' || node._tag === 'List' ? node.key : undefined
 
   if (identity !== undefined && userKey !== undefined) {
     return JSON.stringify([identity, 'key', userKey])
@@ -383,6 +385,7 @@ const renderNode = <Message,>(
     gestures !== undefined && Array.isReadonlyArrayNonEmpty(gestures)
   const nodeReactKey = hasGestures ? undefined : reactKey
   const rendered = Match.value(node).pipe(
+    Match.withReturnType<React.ReactElement | null>(),
     Match.tagsExhaustive({
       Empty: () => null,
       Element: element => {
@@ -422,6 +425,28 @@ const renderNode = <Message,>(
           )
         }
       },
+      List: node => {
+        const { layout, text: textStyle } = splitStyle(
+          node.attributes.style,
+          inheritedTextStyle,
+        )
+
+        return React.createElement(NativeList<Message>, {
+          key: nodeReactKey ?? node.key,
+          node,
+          layout,
+          dispatch,
+          isActive,
+          renderRow: child =>
+            renderNode(
+              child,
+              dispatch,
+              textStyle,
+              isActive,
+              toReactKey(child, 0),
+            ),
+        })
+      },
       Stack: node =>
         React.createElement(NativeStack<Message>, {
           node,
@@ -443,6 +468,10 @@ const renderNode = <Message,>(
 
   if (node._tag === 'Empty' || rendered === null) {
     return null
+  }
+
+  if (node._tag === 'List') {
+    return rendered
   }
 
   if (hasGestures && gestures !== undefined) {

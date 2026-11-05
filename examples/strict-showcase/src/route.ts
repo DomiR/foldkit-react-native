@@ -8,6 +8,7 @@ export const AppRoute = defineRouteUnion({
   Stopwatch: {},
   Todo: {},
   Form: {},
+  Contacts: {},
   Gestures: {},
   Animations: {},
   NotFound: { path: Schema.String },
@@ -44,6 +45,12 @@ export const formRouter = pipe(
   Route.mapTo(AppRoute.Form),
 )
 
+export const contactsRouter = pipe(
+  literal('examples'),
+  slash(literal('contacts')),
+  Route.mapTo(AppRoute.Contacts),
+)
+
 export const gesturesRouter = pipe(
   literal('gestures'),
   Route.mapTo(AppRoute.Gestures),
@@ -61,6 +68,7 @@ const routeParser = Route.oneOf(
   stopwatchRouter,
   todoRouter,
   formRouter,
+  contactsRouter,
   examplesRouter,
   gesturesRouter,
   animationsRouter,
@@ -79,6 +87,7 @@ export const appRouteToUrl = (appRoute: AppRoute): string =>
     Stopwatch: () => stopwatchRouter(),
     Todo: () => todoRouter(),
     Form: () => formRouter(),
+    Contacts: () => contactsRouter(),
     Gestures: () => gesturesRouter(),
     Animations: () => animationsRouter(),
     NotFound: () => examplesRouter(),
