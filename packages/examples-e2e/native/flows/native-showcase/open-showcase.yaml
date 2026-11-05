@@ -1,0 +1,16 @@
+appId: ${APP_ID}
+
+---
+- retry:
+    maxRetries: 2
+    commands:
+      - stopApp: ${APP_ID}
+      - launchApp:
+          appId: ${APP_ID}
+      - openLink: ${METRO_URL}
+      - tapOn:
+          text: 'Open'
+          optional: true
+      - extendedWaitUntil:
+          visible: 'Shared examples'
+          timeout: 120000
