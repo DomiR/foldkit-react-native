@@ -1,8 +1,14 @@
+import * as Linking from 'expo-linking'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { FakeWebSocket } from './nativeFixtures'
 
 vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }))
+vi.mock('expo-linking', () => ({
+  getLinkingURL: vi.fn(() => null),
+  getInitialURL: vi.fn(async () => null),
+  addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+}))
 vi.mock('react-native-reanimated', () => ({
   Easing: { linear: (value: number) => value },
   cancelAnimation: vi.fn(),
@@ -18,6 +24,10 @@ vi.mock('react-native-worklets', () => ({
 }))
 
 beforeEach(() => {
+  vi.stubGlobal('__DEV__', false)
+  vi.mocked(Linking.getLinkingURL).mockReset().mockReturnValue(null)
+  vi.mocked(Linking.getInitialURL).mockReset().mockResolvedValue(null)
+  vi.mocked(Linking.addEventListener).mockClear()
   FakeWebSocket.sockets = []
 })
 

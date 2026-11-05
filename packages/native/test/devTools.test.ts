@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { resolveNativeDevTools } from '../src/devTools'
 import { makeNativeHost } from '../src/host'
+import { expoLinking } from '../src/linking'
 
 describe('native DevTools options', () => {
   it.each([
@@ -51,7 +52,11 @@ describe('native DevTools options', () => {
       excludeFromHistory: ['CompletedTick'],
     })
     expect(Option.getOrThrow(resolved.maybeMessageSchema)).toBe(Message)
-    const host = makeNativeHost(maybeResolved)
+    const host = makeNativeHost(
+      expoLinking,
+      { isLaunchUrlReplayed: true },
+      maybeResolved,
+    )
     expect(host.isDevelopment).toBe(false)
     expect(host.isDevToolsDevelopment()).toBe(true)
   })
@@ -102,6 +107,10 @@ describe('native DevTools options', () => {
     vi.stubGlobal('__DEV__', undefined)
     expect(Option.isNone(resolveNativeDevTools({}, 'ios'))).toBe(true)
     expect(warn).not.toHaveBeenCalled()
-    expect(makeNativeHost().isDevToolsDevelopment()).toBe(false)
+    expect(
+      makeNativeHost(expoLinking, {
+        isLaunchUrlReplayed: true,
+      }).isDevToolsDevelopment(),
+    ).toBe(false)
   })
 })
