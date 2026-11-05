@@ -42,7 +42,7 @@ export const collectNativeAttributes = <Message>(
   )
 
 /** Creates a portable builder whose elements contain data and event mappers.
- * Native runtimes stamp input frames with the latest reported edit revision. */
+ * Native runtimes stamp text control frames with the latest reported edit revision. */
 export const makeNativeBuilder = <Message>(
   readInputRevision: () => number = () => 0,
 ): NativeBuilder<Message> => {
@@ -58,7 +58,9 @@ export const makeNativeBuilder = <Message>(
     return {
       _tag: 'Element',
       tag,
-      ...(tag === 'input' ? { inputRevision: readInputRevision() } : {}),
+      ...(tag === 'input' || tag === 'textarea'
+        ? { inputRevision: readInputRevision() }
+        : {}),
       key: key ?? attributeKey,
       attributes: elementAttributes,
       children,
@@ -82,11 +84,18 @@ export const makeNativeBuilder = <Message>(
     label: element('label'),
     button: element('button'),
     input: element('input'),
+    textarea: element('textarea'),
     img: element('img'),
     ul: element('ul'),
     li: element('li'),
-    keyed: tag => (key, attributes, children) =>
-      buildElement(tag, attributes, children, key),
+    keyed:
+      (tag: NativeTag) =>
+      (
+        key: string,
+        attributes: ReadonlyArray<NativeAttribute<Message>>,
+        children?: ReadonlyArray<NativeChild<Message>>,
+      ): NativeNode<Message> =>
+        buildElement(tag, attributes, children, key),
     stack: (attributes, screens) => ({
       _tag: 'Stack',
       attributes: collectNativeAttributes(attributes),
@@ -115,6 +124,7 @@ export const makeNativeBuilder = <Message>(
     OnInput: toMessage => ({ onInput: toMessage }),
     OnSubmitEditing: message => ({ onSubmitEditing: message }),
     Value: value => ({ value }),
+    Rows: rows => ({ rows }),
     Placeholder: placeholder => ({ placeholder }),
     Src: src => ({ src }),
     Alt: alt => ({ alt }),

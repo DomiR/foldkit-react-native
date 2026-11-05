@@ -14,6 +14,7 @@ import {
   type Attribute,
   type Html,
   type HtmlBuilder,
+  type TextareaAttribute,
 } from '../html/index.js'
 import type {
   AnimatedStyleBinding,
@@ -31,6 +32,33 @@ type Bindings<Message> = Readonly<{
   entering?: StrictLayoutAnimation
   onTransitionEnd?: Message
 }>
+
+const buildHostElement = <Message>(
+  h: HtmlBuilder<Message>,
+  tag: StrictTag,
+  key: string | undefined,
+  attributes: ReadonlyArray<Attribute<Message>>,
+  children: ReadonlyArray<Html | string | null> | undefined,
+): Html => {
+  if (tag === 'textarea') {
+    const textareaAttributes = Array.filter(
+      attributes,
+      (attribute): attribute is TextareaAttribute<Message> =>
+        attribute._tag !== 'InnerHTML',
+    )
+    if (key === undefined) {
+      return h.textarea(textareaAttributes)
+    } else {
+      return h.keyed('textarea')(key, textareaAttributes)
+    }
+  } else {
+    if (key === undefined) {
+      return h[tag](attributes, children)
+    } else {
+      return h.keyed(tag)(key, attributes, children)
+    }
+  }
+}
 
 const BINDINGS_PROPERTY = '__foldkitStrictBindings'
 const DEFAULT_LAYOUT_MS = 300
@@ -75,11 +103,7 @@ export const renderStrictElement = <Message>(
     bindings.entering !== undefined ||
     bindings.onTransitionEnd !== undefined
   if (!isBound) {
-    if (key === undefined) {
-      return h[tag](attributes, children)
-    } else {
-      return h.keyed(tag)(key, attributes, children)
-    }
+    return buildHostElement(h, tag, key, attributes, children)
   }
   const isTrackedPan =
     bindings.gestures?.some(
@@ -134,7 +158,10 @@ export const renderStrictElement = <Message>(
     }> => Predicate.isFunction(input),
   )
   const decodeReadBindings = Schema.decodeUnknownSync(ReadBindings)
-  const target = h[tag](
+  const target = buildHostElement(
+    h,
+    tag,
+    undefined,
     [
       ...attributes,
       ...(isGestured ? [h.DataAttribute('foldkit-strict-gesture', '')] : []),
