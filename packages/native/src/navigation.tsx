@@ -67,6 +67,7 @@ const containsList = <Message,>(
   })
 
 const NavigationBackgroundContext = React.createContext('#ffffff')
+const StackUpdatesContext = React.createContext(true)
 
 const KeyboardColumn = ({
   children,
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
 
 /** Renders the Model's screens and reports native back actions as Messages. */
 export const NativeStack = <Message,>({
-  node,
+  node: modelNode,
   dispatch,
   renderContent,
   isActive,
@@ -213,14 +214,24 @@ export const NativeStack = <Message,>({
   renderContent: RenderContent<Message>
   isActive: boolean
 }>): React.ReactElement => {
+  const isStackUpdateAllowed = React.useContext(StackUpdatesContext)
+  const [node, setNode] = React.useState(modelNode)
+
+  // NOTE: iOS can corrupt a hidden UINavigationController's header when its
+  // stack changes in the tab-selection commit. Wait for the tab's didAppear.
+  if (isStackUpdateAllowed && node !== modelNode) {
+    setNode(modelNode)
+  }
+
   const { onDismissed } = node.attributes
+  const isStackActive = isActive && isStackUpdateAllowed
   const inheritedBackground = React.useContext(NavigationBackgroundContext)
   const stackBackground =
     node.attributes.style?.backgroundColor ?? inheritedBackground
   const hasBack = node.screens.length > 1 && onDismissed !== undefined
   const maybeTop = Array.last(node.screens)
   const requestDismissal = (dismissedCount: number): void => {
-    if (isActive && hasBack && onDismissed !== undefined) {
+    if (isStackActive && hasBack && onDismissed !== undefined) {
       dispatch(onDismissed(dismissedCount))
     }
   }
@@ -229,7 +240,7 @@ export const NativeStack = <Message,>({
   })
 
   React.useEffect(() => {
-    if (!isActive || !hasBack) {
+    if (!isStackActive || !hasBack) {
       return
     }
 
@@ -241,7 +252,7 @@ export const NativeStack = <Message,>({
       },
     )
     return () => subscription.remove()
-  }, [isActive, hasBack])
+  }, [isStackActive, hasBack])
 
   // NOTE: ScreenStackItem rejects decreasing activityState. All Model screens
   // stay active; ScreenStack determines their visibility from their order.
@@ -279,9 +290,9 @@ export const NativeStack = <Message,>({
               hidden: false,
               hideBackButton: screenIndex === 0 || !hasBack,
             }}
-            preventNativeDismiss={false}
+            preventNativeDismiss={!isStackUpdateAllowed}
             nativeBackButtonDismissalEnabled={true}
-            gestureEnabled={hasBack && isTop}
+            gestureEnabled={isStackUpdateAllowed && hasBack && isTop}
             onDismissed={isTop ? reportDismissal : undefined}
             onHeaderBackButtonClicked={
               isTop ? () => requestDismissal(1) : undefined
@@ -291,7 +302,7 @@ export const NativeStack = <Message,>({
               <NavigationBody
                 attributes={attributes}
                 renderContent={renderContent}
-                isActive={isActive && isTop}
+                isActive={isStackActive && isTop}
                 isStackScreen
               >
                 {screen.children}
@@ -372,6 +383,10 @@ export const NativeTabs = <Message,>({
   isActive: boolean
 }>): React.ReactElement => {
   const { selectedTab, onSelectTab } = node.attributes
+  const isParentStackUpdateAllowed = React.useContext(StackUpdatesContext)
+  const [maybeVisibleTabKey, setMaybeVisibleTabKey] = React.useState<
+    Option.Option<string>
+  >(Option.none)
   const resolveAndroidTabIcon = useAndroidTabIcons(node.tabs)
   const maybeSelectedKey = Option.orElse(
     Option.fromNullishOr(selectedTab),
@@ -412,6 +427,22 @@ export const NativeTabs = <Message,>({
                 key={tab.key}
                 screenKey={tab.key}
                 title={attributes.title ?? tab.key}
+                onDidAppear={
+                  Platform.OS === 'ios'
+                    ? () => setMaybeVisibleTabKey(Option.some(tab.key))
+                    : undefined
+                }
+                onWillDisappear={
+                  Platform.OS === 'ios'
+                    ? () =>
+                        setMaybeVisibleTabKey(maybeVisibleKey =>
+                          Option.filter(
+                            maybeVisibleKey,
+                            key => key !== tab.key,
+                          ),
+                        )
+                    : undefined
+                }
                 android={resolveAndroidTabIcon(attributes.tabIcon)}
                 ios={{
                   overrideScrollViewContentInsetAdjustmentBehavior: false,
@@ -438,14 +469,24 @@ export const NativeTabs = <Message,>({
                   },
                 }}
               >
-                <NativeTabBody
-                  tab={tab}
-                  attributes={attributes}
-                  backgroundColor={node.attributes.style?.backgroundColor}
-                  dispatch={dispatch}
-                  renderContent={renderContent}
-                  isActive={isActive && tab.key === selectedKey}
-                />
+                <StackUpdatesContext.Provider
+                  value={
+                    isParentStackUpdateAllowed &&
+                    (Platform.OS !== 'ios' ||
+                      (isActive &&
+                        tab.key === selectedKey &&
+                        Option.contains(maybeVisibleTabKey, tab.key)))
+                  }
+                >
+                  <NativeTabBody
+                    tab={tab}
+                    attributes={attributes}
+                    backgroundColor={node.attributes.style?.backgroundColor}
+                    dispatch={dispatch}
+                    renderContent={renderContent}
+                    isActive={isActive && tab.key === selectedKey}
+                  />
+                </StackUpdatesContext.Provider>
               </Tabs.Screen>
             )
           })}
