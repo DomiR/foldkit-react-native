@@ -25,6 +25,52 @@ import { NativeInputContext, NativeTextInput } from './textInput'
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
 
+const toReactKey = <Message,>(
+  node: NativeNode<Message>,
+  ordinal: number,
+): string | undefined => {
+  const identity = node._tag === 'Empty' ? undefined : node.identity
+  const userKey = node._tag === 'Element' ? node.key : undefined
+
+  if (identity !== undefined && userKey !== undefined) {
+    return JSON.stringify([identity, 'key', userKey])
+  } else if (identity !== undefined) {
+    return JSON.stringify([identity, 'nth', ordinal])
+  } else {
+    return userKey
+  }
+}
+
+const toChildReactKeys = <Message,>(
+  children: ReadonlyArray<NativeChild<Message>>,
+): ReadonlyArray<string | undefined> => {
+  const identityOrdinals = new Map<string, number>()
+  const [, keys] = Array.mapAccum(
+    children,
+    identityOrdinals,
+    (identityOrdinals, child) => {
+      if (
+        child === null ||
+        Predicate.isString(child) ||
+        child._tag === 'Empty'
+      ) {
+        return [identityOrdinals, undefined]
+      }
+
+      const { identity } = child
+      if (identity === undefined) {
+        return [identityOrdinals, toReactKey(child, 0)]
+      }
+
+      const ordinal = identityOrdinals.get(identity) ?? 0
+      identityOrdinals.set(identity, ordinal + 1)
+      return [identityOrdinals, toReactKey(child, ordinal)]
+    },
+  )
+
+  return keys
+}
+
 const splitStyle = (
   style: NativeStyle | undefined,
   inheritedTextStyle: TextStyle,
@@ -66,6 +112,7 @@ const renderChild = <Message,>(
   isTextParent: boolean,
   textStyle: TextStyle,
   isActive: boolean,
+  reactKey: string | undefined,
 ): React.ReactNode => {
   if (child === null) {
     return null
@@ -78,7 +125,7 @@ const renderChild = <Message,>(
       return React.createElement(Text, { style: textStyle }, child)
     }
   } else {
-    return renderNode(child, dispatch, textStyle, isActive)
+    return renderNode(child, dispatch, textStyle, isActive, reactKey)
   }
 }
 
@@ -87,14 +134,15 @@ const renderElement = <Message,>(
   dispatch: (message: Message) => void,
   inheritedTextStyle: TextStyle,
   isActive: boolean,
+  reactKey: string | undefined,
   motion?: NativeMotion,
 ): React.ReactElement => {
-  const { key, attributes, children } = node
+  const { attributes, children } = node
   const { style, ariaLabel, onClick, onInput, onSubmitEditing, isDisabled } =
     attributes
   const { layout, text } = splitStyle(style, inheritedTextStyle)
   const onPress = onClick === undefined ? undefined : () => dispatch(onClick)
-  const props = { key, accessibilityLabel: ariaLabel }
+  const props = { key: reactKey, accessibilityLabel: ariaLabel }
   const motionProps =
     motion === undefined
       ? {}
@@ -180,9 +228,10 @@ const renderElement = <Message,>(
       )
     }
   }
+  const childReactKeys = toChildReactKeys(children)
   const renderChildren = (isTextParent: boolean) =>
-    children.map(child =>
-      renderChild(child, dispatch, isTextParent, text, isActive),
+    Array.zipWith(children, childReactKeys, (child, reactKey) =>
+      renderChild(child, dispatch, isTextParent, text, isActive, reactKey),
     )
 
   return Match.value(node).pipe(
@@ -296,6 +345,7 @@ const renderNode = <Message,>(
   dispatch: (message: Message) => void,
   inheritedTextStyle: TextStyle,
   isActive: boolean,
+  reactKey: string | undefined,
 ): React.ReactElement | null => {
   const renderContent = (
     attributes: NativeAttributes<Message>,
@@ -307,7 +357,12 @@ const renderNode = <Message,>(
       dispatch,
       inheritedTextStyle,
       isChildActive,
+      undefined,
     )
+  const gestures = node._tag === 'Empty' ? undefined : node.attributes.gestures
+  const hasGestures =
+    gestures !== undefined && Array.isReadonlyArrayNonEmpty(gestures)
+  const nodeReactKey = hasGestures ? undefined : reactKey
   const rendered = Match.value(node).pipe(
     Match.tagsExhaustive({
       Empty: () => null,
@@ -325,7 +380,7 @@ const renderNode = <Message,>(
           style?.transitionTimingFunction !== undefined
         if (isAnimated) {
           return React.createElement(NativeAnimatedElement<Message>, {
-            key: element.key,
+            key: nodeReactKey,
             attributes,
             dispatch,
             children: motion =>
@@ -334,11 +389,18 @@ const renderNode = <Message,>(
                 dispatch,
                 inheritedTextStyle,
                 isActive,
+                undefined,
                 motion,
               ),
           })
         } else {
-          return renderElement(element, dispatch, inheritedTextStyle, isActive)
+          return renderElement(
+            element,
+            dispatch,
+            inheritedTextStyle,
+            isActive,
+            nodeReactKey,
+          )
         }
       },
       Stack: node =>
@@ -347,6 +409,7 @@ const renderNode = <Message,>(
           dispatch,
           renderContent,
           isActive,
+          key: nodeReactKey,
         }),
       Tabs: node =>
         React.createElement(NativeTabs<Message>, {
@@ -354,6 +417,7 @@ const renderNode = <Message,>(
           dispatch,
           renderContent,
           isActive,
+          key: nodeReactKey,
         }),
     }),
   )
@@ -362,10 +426,9 @@ const renderNode = <Message,>(
     return null
   }
 
-  const { gestures } = node.attributes
-  if (gestures !== undefined && Array.isReadonlyArrayNonEmpty(gestures)) {
+  if (hasGestures && gestures !== undefined) {
     return React.createElement(NativeGestures<Message>, {
-      key: node._tag === 'Element' ? node.key : undefined,
+      key: reactKey,
       gestures,
       dispatch,
       children: rendered,
@@ -395,7 +458,7 @@ export const FoldkitRoot = <Model, Message>({
       React.createElement(
         GestureHandlerRootView,
         { style: { flex: 1 } },
-        renderNode(node, program.dispatch, {}, true),
+        renderNode(node, program.dispatch, {}, true, toReactKey(node, 0)),
       ),
     ),
   )

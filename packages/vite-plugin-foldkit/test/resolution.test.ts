@@ -41,6 +41,12 @@ type DependencyFields = Readonly<
 const PLUGIN_ROOT = resolve(import.meta.dirname, '..')
 const PLUGIN_SOURCE = resolve(PLUGIN_ROOT, 'src/index.ts')
 const CHILD_PROCESS_TEST_TIMEOUT_MS = 20_000
+const FIXTURE_REMOVAL_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 5,
+  retryDelay: 100,
+}
 
 const writeFiles = async (root: string, files: Files): Promise<void> => {
   for (const [path, content] of Object.entries(files)) {
@@ -52,7 +58,7 @@ const writeFiles = async (root: string, files: Files): Promise<void> => {
 const makeTemporaryDirectory = async (): Promise<string> => {
   const directory = await mkdtemp(join(tmpdir(), 'foldkit-resolution-'))
   onTestFinished(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await rm(directory, FIXTURE_REMOVAL_OPTIONS)
   })
   return directory
 }

@@ -44,26 +44,34 @@ export type NativeAttributes<Message> = Readonly<{
 export type NativeAttribute<Message> = NativeAttributes<Message> &
   Readonly<{ key?: string }>
 
+type NativeNodeIdentity = {
+  /** The framework-managed view identity stamped by the build transform. Application code does not set this field. */
+  identity?: string
+}
+
 /** A native element or an explicitly empty view. */
 export type NativeNode<Message> =
-  | Readonly<{
+  | (Readonly<{
       _tag: 'Element'
       tag: NativeTag
       inputRevision?: number
       key: string | undefined
       attributes: NativeAttributes<Message>
       children: ReadonlyArray<NativeChild<Message>>
-    }>
-  | Readonly<{
+    }> &
+      NativeNodeIdentity)
+  | (Readonly<{
       _tag: 'Stack'
       attributes: NativeAttributes<Message>
       screens: ReadonlyArray<NativeScreen<Message>>
-    }>
-  | Readonly<{
+    }> &
+      NativeNodeIdentity)
+  | (Readonly<{
       _tag: 'Tabs'
       attributes: NativeAttributes<Message>
       tabs: ReadonlyArray<NativeTab<Message>>
-    }>
+    }> &
+      NativeNodeIdentity)
   | Readonly<{ _tag: 'Empty' }>
 
 /** An element, text, or an omitted child. */

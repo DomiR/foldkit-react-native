@@ -34,6 +34,33 @@ This plugin supplies that identity. At build time, in dev and production alike, 
 
 Foldkit core modules are never instrumented, and functions that never return vnodes are wrapped inertly. Builds without this plugin fall back to positional matching plus keys, where branch points need hand-written keys.
 
+## Metro and Babel
+
+Use the Babel subpath with Metro to apply the same view identity transform to TypeScript, JSX, and native application modules:
+
+```javascript
+const path = require('node:path')
+
+module.exports = function (api) {
+  api.cache(true)
+
+  return {
+    presets: [['babel-preset-expo', { transformImportMeta: true }]],
+    plugins: [
+      [
+        '@foldkit/vite-plugin/babel',
+        {
+          brandModule: '@foldkit/native/brand',
+          root: path.resolve(__dirname, '../..'),
+        },
+      ],
+    ],
+  }
+}
+```
+
+Native nodes need a brand module that recognizes them, such as `@foldkit/native/brand`. Worklet functions are left untouched. Metro caches transforms, so use `--clear` after changing the plugin.
+
 ## State-preserving live reload
 
 When you save a file during development, the plugin:
