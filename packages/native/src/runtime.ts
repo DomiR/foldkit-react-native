@@ -14,6 +14,7 @@ import type { RoutingConfig } from 'foldkit/runtime'
 import {
   type RuntimeCrashConfig,
   type RuntimeRenderer,
+  makeBlockRuntime,
   makeRuntimeCore,
 } from 'foldkit/runtime-core'
 import type {
@@ -120,6 +121,40 @@ export type NativeProgramConfig<
       }>
   )
 
+/** A root Block and its native view. Pass a completed root Block, or the
+ * original Block with the `layer` that completes it. Child Blocks, their
+ * Commands, Subscriptions, and ManagedResources run as they do in
+ * `Program.make`. The Block's Message Schema enables DevTools dispatch. */
+export type NativeBlockProgramConfig<Model, Message> = Readonly<{
+  block: Readonly<{
+    Model: Schema.Codec<Model, any, never, never>
+    Message: Schema.Codec<Message, any, never, never>
+  }>
+  layer?: Layer.Layer<any, any, any>
+  view:
+    | StrictView<Model, Message>
+    | ((model: Model, h: NativeBuilder<Message>) => NativeNode<Message>)
+  /** Services for the Block's Commands and Layer construction. */
+  resources?: Layer.Layer<any, any, never>
+  routing?: RoutingConfig<Message>
+  crash?: RuntimeCrashConfig<Model, Message>
+  id?: string
+  animationHost?: NativeAnimationHost
+  linking?: NativeLinking
+  devTools?:
+    | false
+    | Omit<Exclude<NativeDevToolsConfig<Message>, false>, 'Message'>
+  instrumentation?: NativeInstrumentation
+}>
+
+type AnyNativeProgramConfig<Model, Message> =
+  | NativeProgramConfig<Model, Message, any, any>
+  | NativeBlockProgramConfig<Model, Message>
+
+const isBlockConfig = <Model, Message>(
+  config: AnyNativeProgramConfig<Model, Message>,
+): config is NativeBlockProgramConfig<Model, Message> => 'block' in config
+
 /** A native node store driven by Foldkit's runtime core. `getModel` reads live
  * state, while `getSnapshot` and `render` read the latest published frame. */
 export type NativeProgram<Model, Message> = Readonly<{
@@ -149,39 +184,49 @@ let nextRuntimeId = 0
  * receives the current Url and native deep-link changes dispatch
  * `routing.onUrlChange`. The animation host's Layer is provided alongside
  * application resources. `dispose` interrupts its runtime fiber. */
-export const makeNativeProgram = <
-  Model,
-  Message,
-  Resources = never,
-  ManagedResourceServices = never,
->(
-  config: NativeProgramConfig<
-    Model,
-    Message,
-    Resources,
-    ManagedResourceServices
-  >,
+const makeProgram = <Model, Message>(
+  config: AnyNativeProgramConfig<Model, Message>,
 ): NativeProgram<Model, Message> => {
-  const maybeDevTools = resolveNativeDevTools(config.devTools, Platform.OS)
-  const ModelCodec =
-    config.Model ?? Schema.declare<Model>((_value): _value is Model => true)
+  const maybeDevTools = isBlockConfig(config)
+    ? resolveNativeDevTools<Message>(
+        config.devTools === undefined || config.devTools === false
+          ? config.devTools
+          : { ...config.devTools, Message: config.block.Message },
+        Platform.OS,
+      )
+    : resolveNativeDevTools(config.devTools, Platform.OS)
+  const maybeModelSchema = isBlockConfig(config)
+    ? Option.some(config.block.Model)
+    : Option.fromNullishOr(config.Model)
+  const ModelCodec = Option.getOrElse(maybeModelSchema, () =>
+    Schema.declare<Model>((_value): _value is Model => true),
+  )
   let inputRevision = 0
   const h = makeNativeBuilder<Message>()
   const id = config.id ?? 'main'
   const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
-  const update = Option.match(maybeInstrumentation, {
-    onNone: () => config.update,
-    onSome: instrumentation => (model: Model, message: Message) => {
-      const startedAt = performance.now()
-      const update_ = config.update(model, message)
-      const endedAt = performance.now()
-      instrumentation.onUpdate(startedAt, endedAt)
-      return update_
-    },
-  })
+  const instrumentUpdate = <
+    Update extends (model: Model, message: Message) => unknown,
+  >(
+    update: Update,
+  ): Update =>
+    Option.match(maybeInstrumentation, {
+      onNone: () => update,
+      onSome: instrumentation =>
+        // NOTE: the wrapper forwards the arguments and result of `update`
+        // unchanged, so it has the type of `update`.
+        /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+        ((model: Model, message: Message) => {
+          const startedAt = performance.now()
+          const update_ = update(model, message)
+          const endedAt = performance.now()
+          instrumentation.onUpdate(startedAt, endedAt)
+          return update_
+        }) as Update,
+    })
   const animationHost = config.animationHost ?? makeNativeAnimationHost()
   const maybeModelPreservation = isDevelopment()
-    ? Option.map(Option.fromNullishOr(config.Model), modelSchema => ({
+    ? Option.map(maybeModelSchema, modelSchema => ({
         encodeModel: Schema.encodeUnknownSync(Schema.toCodecJson(modelSchema)),
       }))
     : Option.none<Readonly<{ encodeModel: (model: Model) => unknown }>>()
@@ -189,13 +234,6 @@ export const makeNativeProgram = <
     animationHost.layer,
     ...Array.fromOption(Option.fromNullishOr(config.resources)),
   )
-  const init = (_flags: void, url?: Url) => {
-    if (config.routing) {
-      return config.init(url ?? rootUrl)
-    }
-
-    return config.init()
-  }
   const listeners = new Set<() => void>()
   let snapshot = h.div([])
   let snapshotInputRevision = 0
@@ -488,31 +526,59 @@ export const makeNativeProgram = <
     ? takeOverProgram(id, animationHost)
     : Option.none<unknown>()
 
-  const runtime = makeRuntimeCore({
-    runtimeId: `native-${nextRuntimeId++}`,
-    kind: 'Element',
-    ports: undefined,
-    Model: ModelCodec,
-    Flags: Schema.Void,
-    configuredFlags: Option.none(),
-    isFlagsRequired: false,
-    init,
-    update,
-    ...(config.subscriptions && { subscriptions: config.subscriptions }),
-    ...(config.managedResources && {
-      managedResources: config.managedResources,
-    }),
-    applicationLayer: resources,
-    ...(config.crash && { crash: config.crash }),
-    devTools: Option.isSome(maybeDevTools) ? maybeDevTools.value.config : false,
-    renderer,
-    ...(config.routing && { routing: config.routing }),
-    host: makeNativeHost(
-      config.linking ?? expoLinking,
-      { isLaunchUrlReplayed: Option.isNone(maybePreservedModel) },
-      maybeDevTools,
-    ),
-  })
+  const host = makeNativeHost(
+    config.linking ?? expoLinking,
+    { isLaunchUrlReplayed: Option.isNone(maybePreservedModel) },
+    maybeDevTools,
+  )
+  const runtimeId = `native-${nextRuntimeId++}`
+  const makePlainRuntime = (
+    plain: NativeProgramConfig<Model, Message, any, any>,
+  ) =>
+    makeRuntimeCore({
+      runtimeId,
+      kind: 'Element',
+      ports: undefined,
+      Model: ModelCodec,
+      Flags: Schema.Void,
+      configuredFlags: Option.none(),
+      isFlagsRequired: false,
+      init: (_flags: void, url?: Url) => {
+        if (plain.routing) {
+          return plain.init(url ?? rootUrl)
+        }
+
+        return plain.init()
+      },
+      update: instrumentUpdate(plain.update),
+      ...(plain.subscriptions && { subscriptions: plain.subscriptions }),
+      ...(plain.managedResources && {
+        managedResources: plain.managedResources,
+      }),
+      applicationLayer: Layer.orDie(resources),
+      ...(plain.crash && { crash: plain.crash }),
+      devTools: Option.isSome(maybeDevTools)
+        ? maybeDevTools.value.config
+        : false,
+      renderer,
+      ...(plain.routing && { routing: plain.routing }),
+      host,
+    })
+  const runtime = isBlockConfig(config)
+    ? makeBlockRuntime({
+        runtimeId,
+        block: config.block,
+        ...(config.layer === undefined ? {} : { layer: config.layer }),
+        applicationLayer: resources,
+        ...(config.routing === undefined ? {} : { routing: config.routing }),
+        ...(config.crash === undefined ? {} : { crash: config.crash }),
+        devTools: Option.isSome(maybeDevTools)
+          ? { ...maybeDevTools.value.config, dispatch: true }
+          : false,
+        renderer,
+        host,
+      })
+    : makePlainRuntime(config)
   const fiber = Effect.runFork(
     runtime.start(Option.getOrUndefined(maybePreservedModel)),
   )
@@ -575,4 +641,28 @@ export const makeNativeProgram = <
   }
 
   return program
+}
+
+/** Creates a native program from a root Block and a native view. */
+export function makeNativeProgram<Model, Message>(
+  config: NativeBlockProgramConfig<Model, Message>,
+): NativeProgram<Model, Message>
+/** Creates a native program from init, update, and a native view. */
+export function makeNativeProgram<
+  Model,
+  Message,
+  Resources = never,
+  ManagedResourceServices = never,
+>(
+  config: NativeProgramConfig<
+    Model,
+    Message,
+    Resources,
+    ManagedResourceServices
+  >,
+): NativeProgram<Model, Message>
+export function makeNativeProgram<Model, Message>(
+  config: AnyNativeProgramConfig<Model, Message>,
+): NativeProgram<Model, Message> {
+  return makeProgram(config)
 }
