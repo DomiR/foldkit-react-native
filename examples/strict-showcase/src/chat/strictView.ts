@@ -1,7 +1,7 @@
 import { String } from 'effect'
 import type { StrictStyle, StrictView } from 'foldkit/strict'
 
-import { Message, type ChatEntry, type Model } from './program'
+import { Message, type ChatEntry, type Model } from './block'
 
 const buttonStyle: StrictStyle = {
   backgroundColor: '#182c25',

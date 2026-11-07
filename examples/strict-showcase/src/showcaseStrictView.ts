@@ -1,4 +1,3 @@
-import { strictView as counterView } from 'counter-example/strictView'
 import { Array, Option } from 'effect'
 import {
   LongPress,
@@ -6,28 +5,29 @@ import {
   type StrictView,
   Swipe,
   Tap,
-  mapMessages,
+  embedBlock,
 } from 'foldkit/strict'
-import { strictView as formView } from 'form-example/strictView'
-import { strictView as stopwatchView } from 'stopwatch-example/strictView'
-import { strictView as todoView } from 'todo-example/strictView'
 
 import { strictView as animationsView } from './animations/strictView'
 import { strictView as chatView } from './chat/strictView'
 import { strictView as contactsView } from './contacts/strictView'
+import { strictView as counterView } from './counter/strictView'
+import { strictView as formView } from './form/strictView'
 import {
+  AnimationsBinding,
+  ChatBinding,
+  ContactsBinding,
+  CounterBinding,
   Example,
+  FormBinding,
   Message,
   type Model,
   ShowcaseRoute,
-  toGotAnimationsMessage,
-  toGotChatMessage,
-  toGotContactsMessage,
-  toGotCounterMessage,
-  toGotFormMessage,
-  toGotStopwatchMessage,
-  toGotTodoMessage,
+  StopwatchBinding,
+  TodoBinding,
 } from './showcase'
+import { strictView as stopwatchView } from './stopwatch/strictView'
+import { strictView as todoView } from './todo/strictView'
 
 export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
   const homeView = () =>
@@ -65,15 +65,14 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
   const routeView = (route: ShowcaseRoute) =>
     ShowcaseRoute.match(route, {
       Home: homeView,
-      Counter: () =>
-        counterView(model.counter, mapMessages(h, toGotCounterMessage)),
+      Counter: () => embedBlock(h, CounterBinding, model.counter, counterView),
       Stopwatch: () =>
-        stopwatchView(model.stopwatch, mapMessages(h, toGotStopwatchMessage)),
-      Todo: () => todoView(model.todo, mapMessages(h, toGotTodoMessage)),
-      Form: () => formView(model.form, mapMessages(h, toGotFormMessage)),
+        embedBlock(h, StopwatchBinding, model.stopwatch, stopwatchView),
+      Todo: () => embedBlock(h, TodoBinding, model.todo, todoView),
+      Form: () => embedBlock(h, FormBinding, model.form, formView),
       Contacts: () =>
-        contactsView(model.contacts, mapMessages(h, toGotContactsMessage)),
-      Chat: () => chatView(model.chat, mapMessages(h, toGotChatMessage)),
+        embedBlock(h, ContactsBinding, model.contacts, contactsView),
+      Chat: () => embedBlock(h, ChatBinding, model.chat, chatView),
     })
   const titleForRoute = (route: ShowcaseRoute): string =>
     ShowcaseRoute.match(route, {
@@ -246,9 +245,11 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
                 'Animations',
                 [h.Title('Animations')],
                 [
-                  animationsView(
+                  embedBlock(
+                    h,
+                    AnimationsBinding,
                     model.animations,
-                    mapMessages(h, toGotAnimationsMessage),
+                    animationsView,
                   ),
                 ],
               ),

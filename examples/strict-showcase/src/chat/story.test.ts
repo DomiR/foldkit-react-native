@@ -1,61 +1,87 @@
-import { Array, Option } from 'effect'
-import { given, message, model, story } from 'foldkit/story'
+import { Array, Effect, Option } from 'effect'
+import { Story } from 'foldkit'
 import { modifyFields } from 'foldkit/struct'
 import { describe, expect, test } from 'vitest'
 
-import { Message, init, update } from './program'
+import { ChatBlock, ChatEntry, Message, Model } from './block'
+import { layer } from './layer'
 
-const initialModel = init().model
+const initialModel = Model.make({
+  messages: Array.makeBy(12, index =>
+    ChatEntry.make({
+      id: `message-${index + 1}`,
+      text: `Message ${index + 1}`,
+    }),
+  ),
+  draft: '',
+  nextMessageId: 13,
+})
 
 describe('update', () => {
-  test('UpdatedDraft stores the current draft', () => {
-    story(
-      update,
-      given(initialModel),
-      message(Message.UpdatedDraft({ text: 'Hello there' })),
-      model(nextModel => {
-        expect(nextModel.draft).toBe('Hello there')
-      }),
-    )
-  })
+  test('init seeds the conversation with an empty draft', () =>
+    Effect.runPromise(
+      Story.story(
+        { block: ChatBlock, layer },
+        Story.init(),
+        Story.Command.expectNone(),
+        Story.model(model => {
+          expect(model.messages).toHaveLength(12)
+          expect(model.draft).toBe('')
+          expect(model.nextMessageId).toBe(13)
+        }),
+      ),
+    ))
+
+  test('UpdatedDraft stores the current draft', () =>
+    Effect.runPromise(
+      Story.story(
+        { block: ChatBlock, layer },
+        Story.given(initialModel),
+        Story.message(Message.UpdatedDraft({ text: 'Hello there' })),
+        Story.model(model => {
+          expect(model.draft).toBe('Hello there')
+        }),
+      ),
+    ))
 
   test('SubmittedDraft appends a trimmed message and clears the draft', () => {
     const modelWithDraft = modifyFields(initialModel, {
       draft: () => '  Hello there  ',
     })
 
-    story(
-      update,
-      given(modelWithDraft),
-      message(Message.SubmittedDraft()),
-      model(nextModel => {
-        expect(nextModel.messages).toHaveLength(
-          initialModel.messages.length + 1,
-        )
-        expect(Option.getOrThrow(Array.last(nextModel.messages))).toStrictEqual(
-          {
+    return Effect.runPromise(
+      Story.story(
+        { block: ChatBlock, layer },
+        Story.given(modelWithDraft),
+        Story.message(Message.SubmittedDraft()),
+        Story.Command.expectNone(),
+        Story.model(model => {
+          expect(model.messages).toHaveLength(initialModel.messages.length + 1)
+          expect(Option.getOrThrow(Array.last(model.messages))).toStrictEqual({
             id: 'message-13',
             text: 'Hello there',
-          },
-        )
-        expect(nextModel.draft).toBe('')
-        expect(nextModel.nextMessageId).toBe(14)
-      }),
+          })
+          expect(model.draft).toBe('')
+          expect(model.nextMessageId).toBe(14)
+        }),
+      ),
     )
   })
 
-  test('SubmittedDraft leaves an empty draft unchanged', () => {
+  test('SubmittedDraft leaves a whitespace-only draft unchanged', () => {
     const modelWithWhitespace = modifyFields(initialModel, {
       draft: () => '   ',
     })
 
-    story(
-      update,
-      given(modelWithWhitespace),
-      message(Message.SubmittedDraft()),
-      model(nextModel => {
-        expect(nextModel).toBe(modelWithWhitespace)
-      }),
+    return Effect.runPromise(
+      Story.story(
+        { block: ChatBlock, layer },
+        Story.given(modelWithWhitespace),
+        Story.message(Message.SubmittedDraft()),
+        Story.model(model => {
+          expect(model).toStrictEqual(modelWithWhitespace)
+        }),
+      ),
     )
   })
 })

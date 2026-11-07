@@ -1,36 +1,30 @@
 import { Layer } from 'effect'
-import * as Runtime from 'foldkit/runtime'
-import * as Todo from 'todo-example/program'
+import { Program, Runtime } from 'foldkit'
+import { makeWebAnimationHost } from 'foldkit/strict/web'
 
 import { BrowserKeyValueStore } from '@effect/platform-browser'
 
-import {
-  Message,
-  Model,
-  animationHost,
-  init,
-  routing,
-  subscriptions,
-  update,
-  view,
-  webShowcaseNavigation,
-} from './main'
+import { makeShowcaseLayer } from './layer'
+import { webShowcaseNavigation } from './navigation'
+import { ShowcaseBlock } from './showcase'
 
-const application = Runtime.makeApplication({
-  Model,
-  Flags: Todo.Flags,
-  init,
-  update,
-  view,
-  subscriptions,
-  routing,
-  resources: Layer.mergeAll(
+const animationHost = makeWebAnimationHost()
+
+const program = Program.make({
+  block: ShowcaseBlock,
+  layer: makeShowcaseLayer(animationHost),
+  container: document.getElementById('root'),
+  routing: {
+    onUrlRequest: ShowcaseBlock.Message.ClickedLink,
+    onUrlChange: ShowcaseBlock.Message.ChangedUrl,
+  },
+  devTools: { dispatch: true },
+}).provide(
+  Layer.mergeAll(
     BrowserKeyValueStore.layerLocalStorage,
     animationHost.layer,
     webShowcaseNavigation,
   ),
-  container: document.getElementById('root'),
-  devTools: { Message },
-})
+)
 
-Runtime.run(application, { flags: Todo.flags })
+Runtime.run(program)

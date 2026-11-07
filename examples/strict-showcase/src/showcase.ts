@@ -1,25 +1,23 @@
-import * as Counter from 'counter-example/program'
 import { Array, Effect, Option, Schema } from 'effect'
-import type { KeyValueStore } from 'effect/persistence'
-import * as Command from 'foldkit/command'
+import { KeyValueStore } from 'effect/persistence'
+import { Block } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest } from 'foldkit/navigation'
 import type { RoutingConfig } from 'foldkit/runtime'
 import { defineTaggedUnion } from 'foldkit/schema'
-import { PanEnd } from 'foldkit/strict'
+import { AnimatedValues, BackgroundRuntime, PanEnd } from 'foldkit/strict'
 import { modifyFields } from 'foldkit/struct'
-import * as Subscription from 'foldkit/subscription'
-import * as Update from 'foldkit/update'
 import { Url, toString as urlToString } from 'foldkit/url'
-import * as Form from 'form-example/program'
-import * as Stopwatch from 'stopwatch-example/program'
-import * as Todo from 'todo-example/program'
 
-import * as Animations from './animations/program'
-import * as Chat from './chat/program'
-import * as Contacts from './contacts/program'
+import { AnimationsBlock } from './animations/block'
+import { ChatBlock } from './chat/block'
+import { ContactsBlock } from './contacts/block'
+import { CounterBlock } from './counter/block'
+import { FormBlock } from './form/block'
 import { ShowcaseNavigation } from './navigation'
 import { AppRoute, appRouteToUrl, urlToAppRoute } from './route'
+import { StopwatchBlock } from './stopwatch/block'
+import { TodoBlock } from './todo/block'
 
 // MODEL
 
@@ -55,13 +53,13 @@ export const Model = Schema.Struct({
   tabs: TabSelection,
   stack: Schema.NonEmptyArray(ShowcaseRoute),
   nextScreenId: Schema.Number,
-  counter: Counter.Model,
-  stopwatch: Stopwatch.Model,
-  todo: Todo.Model,
-  form: Form.Model,
-  contacts: Contacts.Model,
-  chat: Chat.Model,
-  animations: Animations.Model,
+  counter: CounterBlock.Model,
+  stopwatch: StopwatchBlock.Model,
+  todo: TodoBlock.Model,
+  form: FormBlock.Model,
+  contacts: ContactsBlock.Model,
+  chat: ChatBlock.Model,
+  animations: AnimationsBlock.Model,
   taps: Schema.Number,
   likes: Schema.Number,
   dislikes: Schema.Number,
@@ -83,13 +81,6 @@ export const Message = defineMessageUnion({
   LongPressedCard: {},
   SwipedCard: { direction: Schema.Literals(['Left', 'Right']) },
   EndedCardPan: { event: PanEnd },
-  GotCounterMessage: { message: Counter.Message },
-  GotStopwatchMessage: { message: Stopwatch.Message },
-  GotTodoMessage: { message: Todo.Message },
-  GotFormMessage: { message: Form.Message },
-  GotContactsMessage: { message: Contacts.Message },
-  GotChatMessage: { message: Chat.Message },
-  GotAnimationsMessage: { message: Animations.Message },
 })
 export type Message = typeof Message.Type
 
@@ -98,96 +89,83 @@ export const routing: RoutingConfig<Message> = {
   onUrlChange: url => Message.ChangedUrl({ url }),
 }
 
-export const toGotCounterMessage = (message: Counter.Message): Message =>
-  Message.GotCounterMessage({ message })
-export const toGotStopwatchMessage = (message: Stopwatch.Message): Message =>
-  Message.GotStopwatchMessage({ message })
-export const toGotTodoMessage = (message: Todo.Message): Message =>
-  Message.GotTodoMessage({ message })
-export const toGotFormMessage = (message: Form.Message): Message =>
-  Message.GotFormMessage({ message })
+// BLOCK
 
-export const toGotContactsMessage = (message: Contacts.Message): Message =>
-  Message.GotContactsMessage({ message })
-
-export const toGotChatMessage = (message: Chat.Message): Message =>
-  Message.GotChatMessage({ message })
-
-export const toGotAnimationsMessage = (message: Animations.Message): Message =>
-  Message.GotAnimationsMessage({ message })
-
-type UpdateReturn = Update.Return<
+export const ShowcaseKey = Symbol('Showcase')
+export const ShowcaseBlock = Block.make('Showcase', {
+  key: ShowcaseKey,
+  InitArgs: Schema.Tuple([Url]),
+  view: { kind: 'Document' },
+  effects: {
+    services: [
+      ShowcaseNavigation,
+      KeyValueStore.KeyValueStore,
+      AnimatedValues,
+      BackgroundRuntime,
+    ],
+  },
   Model,
   Message,
-  KeyValueStore.KeyValueStore | Animations.Requirements | ShowcaseNavigation
->
+})
 
-// INIT
+const { makeCommand, makeComposition, makeRequiredFieldBinding } = ShowcaseBlock
 
-export const init = (flags: Todo.Flags, url: Url): UpdateReturn => {
-  const counterInit = Counter.init()
-  const stopwatchInit = Stopwatch.init()
-  const todoInit = Todo.init(flags)
-  const formInit = Form.init()
-  const contactsInit = Contacts.init()
-  const chatInit = Chat.init()
-  const animationsInit = Animations.init()
+export const CounterBinding = makeRequiredFieldBinding(CounterBlock, {
+  field: 'counter',
+})
+export const StopwatchBinding = makeRequiredFieldBinding(StopwatchBlock, {
+  field: 'stopwatch',
+})
+export const TodoBinding = makeRequiredFieldBinding(TodoBlock, {
+  field: 'todo',
+})
+export const FormBinding = makeRequiredFieldBinding(FormBlock, {
+  field: 'form',
+})
+export const ContactsBinding = makeRequiredFieldBinding(ContactsBlock, {
+  field: 'contacts',
+})
+export const ChatBinding = makeRequiredFieldBinding(ChatBlock, {
+  field: 'chat',
+})
+export const AnimationsBinding = makeRequiredFieldBinding(AnimationsBlock, {
+  field: 'animations',
+})
 
-  const commands = [
-    ...(Command.mapMessages(counterInit.commands, toGotCounterMessage) ?? []),
-    ...(Command.mapMessages(stopwatchInit.commands, toGotStopwatchMessage) ??
-      []),
-    ...(Command.mapMessages(todoInit.commands, toGotTodoMessage) ?? []),
-    ...(Command.mapMessages(formInit.commands, toGotFormMessage) ?? []),
-    ...(Command.mapMessages(animationsInit.commands, toGotAnimationsMessage) ??
-      []),
-  ]
-
-  const model = Model.make({
-    tabs: 'Examples',
-    stack: [ShowcaseRoute.Home({ id: 0 })],
-    nextScreenId: 1,
-    taps: 0,
-    likes: 0,
-    dislikes: 0,
-    maybeLastPan: Option.none(),
-    counter: counterInit.model,
-    stopwatch: stopwatchInit.model,
-    todo: todoInit.model,
-    form: formInit.model,
-    contacts: contactsInit.model,
-    chat: chatInit.model,
-    animations: animationsInit.model,
-  })
-
-  return {
-    model: applyAppRoute(model, urlToAppRoute(url)),
-    commands,
-  }
-}
+export const ShowcaseComposition = makeComposition({
+  bindings: [
+    CounterBinding,
+    StopwatchBinding,
+    TodoBinding,
+    FormBinding,
+    ContactsBinding,
+    ChatBinding,
+    AnimationsBinding,
+  ],
+})
 
 // COMMAND
 
-export const PushUrl = Command.define('PushUrl', {
+export const PushUrl = makeCommand('PushUrl', {
   args: { url: Schema.String },
   messages: [Message.CompletedPushUrl],
-  execute: ({ url }) =>
-    Effect.gen(function* () {
-      const navigation = yield* ShowcaseNavigation
-      yield* navigation.pushUrl(url)
-      return Message.CompletedPushUrl()
-    }),
+  handler: function* () {
+    const navigation = yield* ShowcaseNavigation
+
+    return ({ url }) =>
+      navigation.pushUrl(url).pipe(Effect.as(Message.CompletedPushUrl()))
+  },
 })
 
-export const ReplaceUrl = Command.define('ReplaceUrl', {
+export const ReplaceUrl = makeCommand('ReplaceUrl', {
   args: { url: Schema.String },
   messages: [Message.CompletedReplaceUrl],
-  execute: ({ url }) =>
-    Effect.gen(function* () {
-      const navigation = yield* ShowcaseNavigation
-      yield* navigation.replaceUrl(url)
-      return Message.CompletedReplaceUrl()
-    }),
+  handler: function* () {
+    const navigation = yield* ShowcaseNavigation
+
+    return ({ url }) =>
+      navigation.replaceUrl(url).pipe(Effect.as(Message.CompletedReplaceUrl()))
+  },
 })
 
 const exampleScreen = (example: Example, id: number): ShowcaseRoute => {
@@ -203,7 +181,12 @@ const exampleScreen = (example: Example, id: number): ShowcaseRoute => {
   return routes[example]
 }
 
-const applyExampleRoute = (model: Model, example: Example): Model => {
+type NavigationModel = Pick<Model, 'tabs' | 'stack' | 'nextScreenId'>
+
+const applyExampleRoute = (
+  model: NavigationModel,
+  example: Example,
+): NavigationModel => {
   const topRoute = Array.lastNonEmpty(model.stack)
 
   if (topRoute._tag === example) {
@@ -223,8 +206,11 @@ const applyExampleRoute = (model: Model, example: Example): Model => {
   })
 }
 
-export const applyAppRoute = (model: Model, appRoute: AppRoute): Model =>
-  AppRoute.match<Model>(appRoute, {
+const routeNavigation = (
+  model: NavigationModel,
+  appRoute: AppRoute,
+): NavigationModel =>
+  AppRoute.match<NavigationModel>(appRoute, {
     Examples: () =>
       modifyFields(model, {
         tabs: () => 'Examples',
@@ -240,6 +226,22 @@ export const applyAppRoute = (model: Model, appRoute: AppRoute): Model =>
     Animations: () => modifyFields(model, { tabs: () => 'Animations' }),
     NotFound: () => model,
   })
+
+const navigationOf = ({
+  tabs,
+  stack,
+  nextScreenId,
+}: NavigationModel): NavigationModel => ({ tabs, stack, nextScreenId })
+
+export const applyAppRoute = (model: Model, appRoute: AppRoute): Model => {
+  const navigation = routeNavigation(navigationOf(model), appRoute)
+
+  return modifyFields(model, {
+    tabs: () => navigation.tabs,
+    stack: () => navigation.stack,
+    nextScreenId: () => navigation.nextScreenId,
+  })
+}
 
 export const modelToAppRoute = (model: Model): AppRoute => {
   if (model.tabs === 'Gestures') {
@@ -282,57 +284,14 @@ const syncUrl = (
 
 // UPDATE
 
-const foldCounter = Update.foldChild({
-  update: Counter.update,
-  read: (model: Model) => Option.some(model.counter),
-  write: (model, nextCounter) =>
-    modifyFields(model, { counter: () => nextCounter }),
-  toParentMessage: toGotCounterMessage,
-})
-const foldStopwatch = Update.foldChild({
-  update: Stopwatch.update,
-  read: (model: Model) => Option.some(model.stopwatch),
-  write: (model, nextStopwatch) =>
-    modifyFields(model, { stopwatch: () => nextStopwatch }),
-  toParentMessage: toGotStopwatchMessage,
-})
-const foldTodo = Update.foldChild({
-  update: Todo.update,
-  read: (model: Model) => Option.some(model.todo),
-  write: (model, nextTodo) => modifyFields(model, { todo: () => nextTodo }),
-  toParentMessage: toGotTodoMessage,
-})
-const foldForm = Update.foldChild({
-  update: Form.update,
-  read: (model: Model) => Option.some(model.form),
-  write: (model, nextForm) => modifyFields(model, { form: () => nextForm }),
-  toParentMessage: toGotFormMessage,
-})
+type UpdateReturn = Readonly<{
+  model: Model
+  commands?: ReadonlyArray<
+    ReturnType<typeof PushUrl> | ReturnType<typeof ReplaceUrl>
+  >
+}>
 
-const foldContacts = Update.foldChild({
-  update: Contacts.update,
-  read: (model: Model) => Option.some(model.contacts),
-  write: (model, nextContacts) =>
-    modifyFields(model, { contacts: () => nextContacts }),
-  toParentMessage: toGotContactsMessage,
-})
-
-const foldChat = Update.foldChild({
-  update: Chat.update,
-  read: (model: Model) => Option.some(model.chat),
-  write: (model, nextChat) => modifyFields(model, { chat: () => nextChat }),
-  toParentMessage: toGotChatMessage,
-})
-
-const foldAnimations = Update.foldChild({
-  update: Animations.update,
-  read: (model: Model) => Option.some(model.animations),
-  write: (model, nextAnimations) =>
-    modifyFields(model, { animations: () => nextAnimations }),
-  toParentMessage: toGotAnimationsMessage,
-})
-
-export const update = (model: Model, message: Message) =>
+const updateShowcase = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     ChangedUrl: ({ url }) => ({
       model: applyAppRoute(model, urlToAppRoute(url)),
@@ -399,33 +358,37 @@ export const update = (model: Model, message: Message) =>
     EndedCardPan: ({ event }) => ({
       model: modifyFields(model, { maybeLastPan: () => Option.some(event) }),
     }),
-    GotCounterMessage: ({ message }) => foldCounter(model, message),
-    GotStopwatchMessage: ({ message }) => foldStopwatch(model, message),
-    GotTodoMessage: ({ message }) => foldTodo(model, message),
-    GotFormMessage: ({ message }) => foldForm(model, message),
-    GotContactsMessage: ({ message }) => foldContacts(model, message),
-    GotChatMessage: ({ message }) => foldChat(model, message),
-    GotAnimationsMessage: ({ message }) => foldAnimations(model, message),
   })
 
-// SUBSCRIPTION
-
-const stopwatchSubscriptions = Subscription.lift(Stopwatch.subscriptions)<
-  Model,
-  Message
->({
-  read: model => Option.some(model.stopwatch),
-  toParentMessage: toGotStopwatchMessage,
+export const update = ShowcaseComposition.makeUpdate({
+  ChangedUrl: updateShowcase,
+  ClickedLink: updateShowcase,
+  CompletedPushUrl: updateShowcase,
+  CompletedReplaceUrl: updateShowcase,
+  PressedExampleRow: updateShowcase,
+  DismissedScreens: updateShowcase,
+  SelectedTab: updateShowcase,
+  TappedCard: updateShowcase,
+  LongPressedCard: updateShowcase,
+  SwipedCard: updateShowcase,
+  EndedCardPan: updateShowcase,
 })
 
-const animationSubscriptions = Subscription.lift(Animations.subscriptions)<
-  Model,
-  Message
->({
-  read: model => Option.some(model.animations),
-  toParentMessage: toGotAnimationsMessage,
-})
-export const subscriptions = Subscription.aggregate(
-  stopwatchSubscriptions,
-  animationSubscriptions,
-)
+// INIT
+
+export const init = ShowcaseComposition.makeInit((url: Url) => ({
+  model: {
+    ...routeNavigation(
+      {
+        tabs: 'Examples',
+        stack: [ShowcaseRoute.Home({ id: 0 })],
+        nextScreenId: 1,
+      },
+      urlToAppRoute(url),
+    ),
+    taps: 0,
+    likes: 0,
+    dislikes: 0,
+    maybeLastPan: Option.none(),
+  },
+}))

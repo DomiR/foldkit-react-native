@@ -1,16 +1,9 @@
 import { Layer, Option } from 'effect'
 import { KeyValueStore } from 'effect/persistence'
+import { makeShowcaseLayer } from 'strict-showcase-example/layer'
 import { nativeShowcaseNavigation } from 'strict-showcase-example/navigation'
-import {
-  Message,
-  Model,
-  init,
-  routing,
-  subscriptions,
-  update,
-} from 'strict-showcase-example/showcase'
+import { Message, ShowcaseBlock } from 'strict-showcase-example/showcase'
 import { showcaseStrictView } from 'strict-showcase-example/showcaseStrictView'
-import * as Todo from 'todo-example/program'
 
 import {
   FoldkitRoot,
@@ -39,18 +32,18 @@ if (Option.isSome(maybePerfHarness)) {
 
 const program = makeNativeProgram({
   id: 'native-showcase',
-  Model,
-  init: url => init(Todo.Flags.make({ todos: Option.none() }), url),
-  update,
-  subscriptions,
+  block: ShowcaseBlock,
+  layer: makeShowcaseLayer(),
   animationHost,
-  routing,
+  routing: {
+    onUrlRequest: request => Message.ClickedLink({ request }),
+    onUrlChange: url => Message.ChangedUrl({ url }),
+  },
   resources: Layer.merge(KeyValueStore.layerMemory, nativeShowcaseNavigation),
   view: showcaseStrictView,
   devTools:
     process.env.EXPO_PUBLIC_FOLDKIT_DEVTOOLS === '1'
       ? {
-          Message,
           name: 'Native Showcase',
           ...(process.env.EXPO_PUBLIC_FOLDKIT_DEVTOOLS_HOST !== undefined && {
             relayHost: process.env.EXPO_PUBLIC_FOLDKIT_DEVTOOLS_HOST,

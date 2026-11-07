@@ -8,7 +8,7 @@ import {
   type StrictView,
 } from 'foldkit/strict'
 
-import { Message, type Model, PrimeState, cardOffset } from './program'
+import { Message, type Model, PrimeState, cardOffset } from './block'
 
 const CARD_STYLE: StrictStyle = {
   minHeight: 140,

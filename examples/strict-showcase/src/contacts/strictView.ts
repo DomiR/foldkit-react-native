@@ -7,7 +7,7 @@ import {
   type Model,
   PageState,
   TOTAL_CONTACTS,
-} from './program'
+} from './block'
 
 const CONTACT_ROW_HEIGHT = 64
 

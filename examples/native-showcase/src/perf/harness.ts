@@ -1,10 +1,20 @@
-import * as Counter from 'counter-example/program'
 import { Option, Predicate } from 'effect'
+import { Message as CounterMessage } from 'strict-showcase-example/counter/block'
 import * as Showcase from 'strict-showcase-example/showcase'
 
 import type { NativeInstrumentation, NativeProgram } from '@foldkit/native'
 
 declare const performance: Readonly<{ now: () => number }>
+
+// NOTE: the perf harness dispatches straight into the program, so it builds
+// the counter Binding's child Message envelope itself.
+/* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+const clickedCounterIncrement = {
+  _tag: 'GotCounterMessage',
+  placement: 'counter',
+  generation: 0,
+  message: CounterMessage.ClickedIncrement(),
+} as unknown as Showcase.Message
 
 const DECIMAL_PLACES = 3
 const ROUNDING_FACTOR = 10 ** DECIMAL_PLACES
@@ -373,9 +383,7 @@ export const makePerfHarness = (
     })
 
     try {
-      program.dispatch(
-        Showcase.toGotCounterMessage(Counter.Message.ClickedIncrement()),
-      )
+      program.dispatch(clickedCounterIncrement)
     } catch (error) {
       maybeLatencySample = Option.none()
       throw error
@@ -423,9 +431,7 @@ export const makePerfHarness = (
       maybeBurst = Option.some(burst)
 
       for (let dispatchIndex = 0; dispatchIndex < size; dispatchIndex += 1) {
-        program.dispatch(
-          Showcase.toGotCounterMessage(Counter.Message.ClickedIncrement()),
-        )
+        program.dispatch(clickedCounterIncrement)
       }
 
       burst.dispatchLoopMs = performance.now() - startedAt

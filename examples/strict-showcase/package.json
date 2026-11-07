@@ -11,12 +11,8 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.1.0",
-    "counter-example": "workspace:*",
     "effect": "4.1.0",
-    "foldkit": "workspace:*",
-    "form-example": "workspace:*",
-    "stopwatch-example": "workspace:*",
-    "todo-example": "workspace:*"
+    "foldkit": "workspace:*"
   },
   "devDependencies": {
     "@foldkit/devtools": "workspace:*",
@@ -30,6 +26,8 @@
     "./navigation": "./src/navigation.ts",
     "./route": "./src/route.ts",
     "./showcase": "./src/showcase.ts",
-    "./showcaseStrictView": "./src/showcaseStrictView.ts"
+    "./layer": "./src/layer.ts",
+    "./showcaseStrictView": "./src/showcaseStrictView.ts",
+    "./counter/block": "./src/counter/block.ts"
   }
 }
