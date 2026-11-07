@@ -2,6 +2,7 @@ import * as React from 'react'
 import { FlatList } from 'react-native'
 import type { ViewStyle } from 'react-native'
 
+import { useIsActive } from './activeContext'
 import type { NativeListRow, NativeNode } from './node'
 
 const ON_END_REACHED_THRESHOLD = 0.5
@@ -39,6 +40,7 @@ export const NativeList = <Message,>({
 }>): React.ReactElement => {
   const { attributes, rows, itemHeight, maintainVisibleContentPosition } = node
   const { ariaLabel, onEndReached } = attributes
+  const isListActive = useIsActive(isActive)
   const { contentInsetAdjustmentBehavior, automaticallyAdjustKeyboardInsets } =
     React.useContext(ListScrollContext)
 
@@ -63,7 +65,7 @@ export const NativeList = <Message,>({
         maintainVisibleContentPosition ? { minIndexForVisible: 0 } : undefined
       }
       onEndReached={() => {
-        if (isActive && onEndReached !== undefined) {
+        if (isListActive && onEndReached !== undefined) {
           dispatch(onEndReached)
         }
       }}

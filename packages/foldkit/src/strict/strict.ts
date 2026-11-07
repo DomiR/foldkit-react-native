@@ -319,6 +319,15 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
     OnDismissed: (toMessage: (dismissedCount: number) => Message) => Attribute
     SelectedTab: (key: string) => Attribute
     OnSelectTab: (toMessage: (key: string) => Message) => Attribute
+    /** On native tabs, `true` lets the tab bar switch as soon as the user taps
+     * a tab, before update runs, and reports the tap through `OnSelectTab`.
+     * Update must then select the reported tab: a Model that keeps another
+     * `SelectedTab` leaves the tab bar on the tapped tab until its
+     * `SelectedTab` changes again. Taps that arrive while an older Model
+     * selection is on its way win over that selection. Without it, or with
+     * `false`, a tap only reports `OnSelectTab` and the tab bar follows the
+     * Model, so update can reject a tab. The web ignores it. */
+    ImmediateTabSelection: (isImmediate: boolean) => Attribute
     Gesture: (gesture: StrictGesture<Message>) => Attribute
     OnTransitionEnd: (message: Message) => Attribute
     Entering: (animation: StrictLayoutAnimation) => Attribute
@@ -328,6 +337,17 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
       mapper: AnimatedStyleBinding['mapper'],
     ) => Attribute
     empty: Node
+    /** Host hook behind `createStrictLazy` and `createStrictKeyedLazy`. Returns
+     * the node cached under `slot` and `key` when `view` and every argument are
+     * equal by reference to the previous call; otherwise calls `view` with
+     * `args` and caches the result. Hosts may skip rendering a reused node.
+     * Application code uses `createStrictLazy` instead. */
+    lazy: <Args extends ReadonlyArray<unknown>>(
+      slot: object,
+      key: PropertyKey | undefined,
+      view: (...args: Args) => Node,
+      args: Args,
+    ) => Node
     Style: (style: StrictStyle) => Attribute
     OnClick: (message: Message) => Attribute
     /** Records that the user scrolled near the end of a list. It may fire more

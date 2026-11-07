@@ -1,7 +1,7 @@
 import { Predicate } from 'effect'
 
 type BrandableNativeNode = Record<string, unknown> & {
-  _tag: 'Element' | 'Stack' | 'Tabs'
+  _tag: 'Element' | 'List' | 'Stack' | 'Tabs'
   identity?: string
 }
 
@@ -33,6 +33,12 @@ const isBrandableNativeNode = (
       hasOwnProperty(value, 'children') &&
       hasOwnProperty(value, 'key')
     )
+  } else if (value['_tag'] === 'List') {
+    return (
+      hasOwnProperty(value, 'key') &&
+      hasOwnProperty(value, 'attributes') &&
+      hasOwnProperty(value, 'rows')
+    )
   } else if (value['_tag'] === 'Stack') {
     return (
       hasOwnProperty(value, 'attributes') && hasOwnProperty(value, 'screens')
@@ -50,8 +56,19 @@ const stampIdentity = (target: BrandableNativeNode, identity: string): void => {
   }
 }
 
+const stampResult = (value: unknown, identity: string): void => {
+  if (isBrandableNativeNode(value)) {
+    stampIdentity(value, identity)
+  } else if (isPlainObject(value) && value['_tag'] === 'Lazy') {
+    // NOTE: a Lazy node wraps the node it reuses; the identity belongs to
+    // that node, which keeps it set-if-absent across cache hits.
+    stampResult(value['node'], identity)
+  }
+}
+
 /**
- * Stamps a framework-managed identity onto a native view result.
+ * Stamps a framework-managed identity onto a native Element, List, Stack, or
+ * Tabs view result, or onto the node a Lazy view result reuses.
  *
  * Identity is the renderer's second axis, independent of user-facing keys:
  * it answers which view function produced this node rather than which sibling
@@ -69,14 +86,12 @@ const stampIdentity = (target: BrandableNativeNode, identity: string): void => {
  * hand.
  */
 export const brandViewResult = <A>(result: A, identity: string): A => {
-  if (isBrandableNativeNode(result)) {
-    stampIdentity(result, identity)
-  } else if (globalThis.Array.isArray(result)) {
+  if (globalThis.Array.isArray(result)) {
     for (const element of result) {
-      if (isBrandableNativeNode(element)) {
-        stampIdentity(element, identity)
-      }
+      stampResult(element, identity)
     }
+  } else {
+    stampResult(result, identity)
   }
 
   return result

@@ -141,4 +141,34 @@ describe('liftStickyFooter', () => {
     expect(Option.getOrThrow(Array.head(footerLift.children))).toBe(stack)
     expect(Option.getOrThrow(Array.last(footerLift.children))).toBe(tabs)
   })
+
+  it('lifts a footer out of a Lazy node and keeps the lifted nodes stable', () => {
+    const h = makeNativeBuilder<string>()
+    const lazy = h.lazy(
+      {},
+      undefined,
+      () =>
+        h.div(
+          [],
+          [h.p([], ['Body']), h.stickyFooter([h.Key('composer')], ['Send'])],
+        ),
+      [],
+    )
+    const children = ['Title', lazy]
+
+    const first = Option.getOrThrow(liftStickyFooter(children))
+    const second = Option.getOrThrow(liftStickyFooter(children))
+
+    expect(first.footer).toMatchObject({
+      _tag: 'Lazy',
+      node: { _tag: 'Element', key: 'composer' },
+    })
+    expect(first.children).toHaveLength(2)
+    expect(first.children[1]).toMatchObject({
+      _tag: 'Lazy',
+      node: { _tag: 'Element', tag: 'div', children: [{ tag: 'p' }] },
+    })
+    expect(second.footer).toBe(first.footer)
+    expect(second.children[1]).toBe(first.children[1])
+  })
 })
