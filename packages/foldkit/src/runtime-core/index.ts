@@ -1,5 +1,10 @@
 export { makeRuntime as makeRuntimeCore } from '../runtime/runtime.js'
 export type { RuntimeCoreConfig } from '../runtime/runtime.js'
+export { makeBlockRuntime } from '../runtime/blockRuntime.js'
+export type {
+  BlockRuntimeConfig,
+  BlockRuntimeProgram,
+} from '../runtime/blockRuntime.js'
 export { startDevToolsBridge } from '../devTools/bridge.js'
 export type {
   DevToolsChannel,

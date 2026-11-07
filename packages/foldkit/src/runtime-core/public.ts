@@ -1,4 +1,5 @@
-export { makeRuntimeCore } from './index.js'
+export { makeBlockRuntime, makeRuntimeCore } from './index.js'
+export type { BlockRuntimeConfig, BlockRuntimeProgram } from './index.js'
 export { startDevToolsBridge } from './index.js'
 export type {
   BootMode,
