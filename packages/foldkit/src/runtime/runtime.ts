@@ -114,6 +114,13 @@ export type RuntimeCoreConfig<
    * registered child bindings supply their occurrence-scoped registrations.
    */
   managedResources?: ManagedResources<Model, Message, ManagedResourceServices>
+  /**
+   * Services for a runtime started without a Block graph. Commands,
+   * Subscriptions, ManagedResources, and the Flags Effect receive them. A
+   * Program built from Blocks supplies its services through its Layers
+   * instead.
+   */
+  applicationLayer?: Layer.Layer<Resources>
   devTools?: RuntimeDevToolsConfig
 }>
 
@@ -213,6 +220,7 @@ export const makeRuntime = <
   slow,
   freezeModel,
   managedResources,
+  applicationLayer: configuredApplicationLayer,
   devTools,
 }: RuntimeCoreConfig<
   Model,
@@ -319,7 +327,7 @@ export const makeRuntime = <
           managedResources,
           runtimeScope,
           maybePortChannels,
-          applicationLayer,
+          applicationLayer: applicationLayer ?? configuredApplicationLayer,
           applicationMemoMap,
         })
 

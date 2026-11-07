@@ -32,8 +32,8 @@ export const toAccessibilityProps = <Message>(
       accessibilityRole: 'button',
       accessibilityState: { disabled: isDisabledState },
     })),
-    Match.when('input', () => {
-      if (isChecked !== undefined) {
+    Match.whenOr('input', 'textarea', () => {
+      if (tag === 'input' && isChecked !== undefined) {
         return {
           ...labelProps,
           accessibilityRole: 'switch',

@@ -1,5 +1,6 @@
 import { Array, Option } from 'effect'
 
+import { isChildAttribute } from '../html/childAttribute.js'
 import type { Attribute, Html, HtmlBuilder } from '../html/index.js'
 import { createKeyedLazy } from '../html/lazy.js'
 import type {
@@ -17,7 +18,7 @@ import type {
 import type { WebAnimationHost } from './webAnimation.js'
 import { renderStrictElement } from './webBindings.js'
 import { renderStrictList } from './webList.js'
-import { toCssProperties } from './webStyle.js'
+import { isStyleAttribute, toCssProperties } from './webStyle.js'
 
 type NavigationAttributes<Message> = Readonly<{
   title?: string
@@ -181,7 +182,7 @@ export const toStrictHtml = <Message>(
     const isControl = tag === 'button' || tag === 'input' || tag === 'textarea'
     const style = attributes.reduce<Record<string, string>>(
       (style, attribute) =>
-        attribute._tag === 'Style' && !styleValues.has(attribute)
+        isStyleAttribute(attribute) && !styleValues.has(attribute)
           ? { ...style, ...attribute.value }
           : style,
       {
@@ -206,7 +207,10 @@ export const toStrictHtml = <Message>(
     }
     const isCheckbox =
       tag === 'input' &&
-      attributes.some(attribute => attribute._tag === 'Checked')
+      attributes.some(
+        attribute =>
+          !isChildAttribute(attribute) && attribute._tag === 'Checked',
+      )
     const inputType = isCheckbox ? 'checkbox' : 'text'
     const controlAttributes: Array<Attribute<Message>> = []
     if (tag === 'button') {
@@ -223,7 +227,7 @@ export const toStrictHtml = <Message>(
       ...Array.filter(
         attributes,
         attribute =>
-          attribute._tag !== 'Style' &&
+          !isStyleAttribute(attribute) &&
           !navigationValues.has(attribute) &&
           !(tag === 'textarea' && submitEditingAttributes.has(attribute)),
       ),

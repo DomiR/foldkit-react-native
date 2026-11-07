@@ -15,11 +15,12 @@ import {
   type ExitRunner,
   markExitRunnersInUse,
 } from '../exitModule.js'
+import { isChildAttribute } from '../html/childAttribute.js'
 import {
+  Prop,
   type Attribute,
   type Html,
   type HtmlBuilder,
-  Prop,
   type TextareaAttribute,
 } from '../html/index.js'
 import type {
@@ -30,8 +31,7 @@ import type { StrictGesture } from './gesture.js'
 import type { StrictTag } from './strict.js'
 import type { WebAnimationHost } from './webAnimation.js'
 import { listenForGestures } from './webGestures.js'
-import { isStyleAttribute } from './webStyle.js'
-import { toCssProperties } from './webStyle.js'
+import { isStyleAttribute, toCssProperties } from './webStyle.js'
 
 type Bindings<Message> = Readonly<{
   gestures?: ReadonlyArray<StrictGesture<Message>>
@@ -53,7 +53,7 @@ const buildHostElement = <Message>(
     const textareaAttributes = Array.filter(
       attributes,
       (attribute): attribute is TextareaAttribute<Message> =>
-        attribute._tag !== 'InnerHTML',
+        isChildAttribute(attribute) || attribute._tag !== 'InnerHTML',
     )
     if (key === undefined) {
       return h.textarea(textareaAttributes)
@@ -136,7 +136,7 @@ const runExit: ExitRunner = (element, done) => {
     return Function.constVoid
   }
 
-  ensureKeyframes(element.ownerDocument)
+  ensureStrictStylesheet(element.ownerDocument)
   const durationMs = exiting.durationMs ?? DEFAULT_LAYOUT_MS
 
   exitingElements.add(element)
@@ -238,7 +238,10 @@ export const renderStrictElement = <Message>(
   const gestureCss = isGestured
     ? { 'touch-action': 'none', 'user-select': 'none' }
     : {}
-  const isMotion = bindings.isTransitioned || bindings.entering !== undefined
+  const isMotion =
+    bindings.isTransitioned ||
+    bindings.entering !== undefined ||
+    bindings.exiting !== undefined
   const css = { ...readCss(bindings), ...enteringCss, ...gestureCss }
   const exitAttributes: Array<Attribute<Message>> = []
 

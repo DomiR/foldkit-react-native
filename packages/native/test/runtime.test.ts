@@ -37,6 +37,10 @@ const Message = defineMessageUnion({
   ClickedLink: { request: UrlRequest },
 })
 type Message = typeof Message.Type
+type NonRoutingProgramConfig = Extract<
+  NativeProgramConfig<Model, Message>,
+  Readonly<{ routing?: undefined }>
+>
 const INIT_INDEX = -1
 const BACKGROUND_DELAY_MS = 1000
 const DRAIN_TURN_MS = 1
@@ -102,7 +106,10 @@ const makeRuntimeFixture = () => {
     config: NativeProgramConfig<Model, Message>,
     expectedCount = 0,
   ) => {
-    const program = makeNativeProgram(config)
+    const program = makeNativeProgram({
+      id: `native-runtime-test-${programs.length}`,
+      ...config,
+    })
     programs.push(program)
 
     await vi.waitFor(
@@ -116,7 +123,7 @@ const makeRuntimeFixture = () => {
     return program
   }
 
-  const createProgram = (overrides: Partial<NativeProgramConfig<Model, Message>> = {}) =>
+  const createProgram = (overrides: Partial<NonRoutingProgramConfig> = {}) =>
     startProgram({
       Model,
       init: () => ({ model: Model.make({ count: 0 }) }),

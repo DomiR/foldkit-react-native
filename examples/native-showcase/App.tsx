@@ -38,6 +38,7 @@ if (Option.isSome(maybePerfHarness)) {
 }
 
 const program = makeNativeProgram({
+  id: 'native-showcase',
   Model,
   init: url => init(Todo.Flags.make({ todos: Option.none() }), url),
   update,
@@ -46,9 +47,6 @@ const program = makeNativeProgram({
   routing,
   resources: Layer.merge(KeyValueStore.layerMemory, nativeShowcaseNavigation),
   view: showcaseStrictView,
-  ...(Option.isNone(maybePerfHarness)
-    ? {}
-    : { instrumentation: maybePerfHarness.value.instrumentation }),
   devTools:
     process.env.EXPO_PUBLIC_FOLDKIT_DEVTOOLS === '1'
       ? {
@@ -62,6 +60,9 @@ const program = makeNativeProgram({
           }),
         }
       : false,
+  ...(Option.isNone(maybePerfHarness)
+    ? {}
+    : { instrumentation: maybePerfHarness.value.instrumentation }),
 })
 
 if (Option.isSome(maybePerfHarness)) {
