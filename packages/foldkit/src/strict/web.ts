@@ -1,5 +1,6 @@
 import { Array, Option } from 'effect'
 
+import { isChildAttribute } from '../html/childAttribute.js'
 import type { Attribute, Html, HtmlBuilder } from '../html/index.js'
 import type {
   AnimatedStyleBinding,
@@ -15,7 +16,7 @@ import type {
 } from './strict.js'
 import type { WebAnimationHost } from './webAnimation.js'
 import { renderStrictElement } from './webBindings.js'
-import { toCssProperties } from './webStyle.js'
+import { isStyleAttribute, toCssProperties } from './webStyle.js'
 
 type NavigationAttributes<Message> = Readonly<{
   title?: string
@@ -148,7 +149,7 @@ export const toStrictHtml = <Message>(
     )
     const style = attributes.reduce<Record<string, string>>(
       (style, attribute) =>
-        attribute._tag === 'Style' && !styleValues.has(attribute)
+        isStyleAttribute(attribute) && !styleValues.has(attribute)
           ? { ...style, ...attribute.value }
           : style,
       { ...defaults, ...(isControl ? controlDefaults : {}) },
@@ -156,7 +157,10 @@ export const toStrictHtml = <Message>(
     const css = { ...style, ...toCssProperties(portableStyle) }
     const isCheckbox =
       tag === 'input' &&
-      attributes.some(attribute => attribute._tag === 'Checked')
+      attributes.some(
+        attribute =>
+          !isChildAttribute(attribute) && attribute._tag === 'Checked',
+      )
     const inputType = isCheckbox ? 'checkbox' : 'text'
     const controlAttributes: Array<Attribute<Message>> = []
     if (tag === 'button') {
@@ -170,7 +174,7 @@ export const toStrictHtml = <Message>(
       ...Array.filter(
         attributes,
         attribute =>
-          attribute._tag !== 'Style' && !navigationValues.has(attribute),
+          !isStyleAttribute(attribute) && !navigationValues.has(attribute),
       ),
       h.Style(css),
     ]

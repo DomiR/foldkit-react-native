@@ -23,6 +23,7 @@ import type { StrictGesture } from './gesture.js'
 import type { StrictTag } from './strict.js'
 import type { WebAnimationHost } from './webAnimation.js'
 import { listenForGestures } from './webGestures.js'
+import { isStyleAttribute } from './webStyle.js'
 import { toCssProperties } from './webStyle.js'
 
 type Bindings<Message> = Readonly<{
@@ -94,7 +95,7 @@ export const renderStrictElement = <Message>(
   }
   const baseCss = attributes.reduce<Record<string, string>>(
     (css, attribute) =>
-      attribute._tag === 'Style' ? { ...css, ...attribute.value } : css,
+      isStyleAttribute(attribute) ? { ...css, ...attribute.value } : css,
     {},
   )
   const readCss = (current: Bindings<Message>): Record<string, string> => {

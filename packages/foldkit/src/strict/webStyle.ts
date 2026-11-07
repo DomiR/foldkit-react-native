@@ -1,6 +1,14 @@
 import { Predicate } from 'effect'
 
+import { isChildAttribute } from '../html/childAttribute.js'
+import type { Attribute } from '../html/index.js'
 import type { StrictStyle } from './strict.js'
+
+/** Narrows a web attribute to a tagged inline style. @internal */
+export const isStyleAttribute = <Message>(
+  attribute: Attribute<Message>,
+): attribute is Extract<Attribute<Message>, Readonly<{ _tag: 'Style' }>> =>
+  !isChildAttribute(attribute) && attribute._tag === 'Style'
 
 const unitlessProperties = new Set(['opacity', 'zIndex', 'fontWeight'])
 

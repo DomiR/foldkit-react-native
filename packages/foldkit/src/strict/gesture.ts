@@ -47,11 +47,16 @@ export type StrictGesture<Message> = ReturnType<
   typeof makeGestureSchema<Message>
 >['Type']
 
-const GestureData = makeGestureSchema(Schema.Unknown)
+type GestureUnion = ReturnType<typeof makeGestureSchema<unknown>>
+
+const GestureData: GestureUnion = makeGestureSchema(Schema.Unknown)
 
 /** Schema construction and exhaustive matching for strict gesture descriptions.
  * @experimental The strict gesture contract may change between releases. */
-export const StrictGesture = {
+export const StrictGesture: Readonly<{
+  Schema: typeof makeGestureSchema
+  match: GestureUnion['match']
+}> = {
   Schema: makeGestureSchema,
   match: GestureData.match,
 }
