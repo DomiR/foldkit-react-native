@@ -580,7 +580,20 @@ const makeProgram = <Model, Message>(
       })
     : makePlainRuntime(config)
   const fiber = Effect.runFork(
-    runtime.start(Option.getOrUndefined(maybePreservedModel)),
+    runtime
+      .start(Option.getOrUndefined(maybePreservedModel))
+      .pipe(
+        Effect.tapCause(cause =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.sync(() =>
+                console.error(
+                  '[foldkit/native] The runtime stopped:',
+                  Cause.pretty(cause),
+                ),
+              ),
+        ),
+      ),
   )
   const getSnapshot = (): NativeNode<Message> => snapshot
   let unregisterProgram = Function.constVoid
@@ -643,10 +656,19 @@ const makeProgram = <Model, Message>(
   return program
 }
 
+type NativeRootBlock = Readonly<{
+  Model: Schema.Codec<any, any, never, never>
+  Message: Schema.Codec<any, any, never, never>
+}>
+
 /** Creates a native program from a root Block and a native view. */
-export function makeNativeProgram<Model, Message>(
-  config: NativeBlockProgramConfig<Model, Message>,
-): NativeProgram<Model, Message>
+export function makeNativeProgram<const BlockValue extends NativeRootBlock>(
+  config: NativeBlockProgramConfig<
+    BlockValue['Model']['Type'],
+    BlockValue['Message']['Type']
+  > &
+    Readonly<{ block: BlockValue }>,
+): NativeProgram<BlockValue['Model']['Type'], BlockValue['Message']['Type']>
 /** Creates a native program from init, update, and a native view. */
 export function makeNativeProgram<
   Model,
