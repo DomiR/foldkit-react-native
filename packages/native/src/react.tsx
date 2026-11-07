@@ -93,6 +93,7 @@ const splitStyle = (
     fontStyle,
     lineHeight,
     letterSpacing,
+    includeFontPadding,
     textAlign,
     textDecorationLine,
     ...layout
@@ -107,6 +108,7 @@ const splitStyle = (
         fontStyle,
         lineHeight,
         letterSpacing,
+        includeFontPadding,
         textAlign,
         textDecorationLine,
       },

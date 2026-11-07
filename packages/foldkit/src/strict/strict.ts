@@ -182,6 +182,10 @@ export const StrictStyle = Schema.Struct({
   fontStyle: Schema.optionalKey(Schema.Literals(['normal', 'italic'])),
   lineHeight: Schema.optionalKey(Schema.Number),
   letterSpacing: Schema.optionalKey(Schema.Number),
+  /** Android only. `false` removes the extra top and bottom padding Android
+   * adds to text for ascenders and descenders, so text lines up with its
+   * `lineHeight`. iOS and the web ignore it. */
+  includeFontPadding: Schema.optionalKey(Schema.Boolean),
   textAlign: Schema.optionalKey(
     Schema.Literals(['auto', 'left', 'right', 'center', 'justify']),
   ),
