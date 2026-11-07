@@ -29,6 +29,7 @@ type NavigationAttributes<Message> = Readonly<{
   title?: string
   tabIcon?: StrictIcon
   onDismissed?: (dismissedCount: number) => Message
+  isBackTitleVisible?: boolean
   selectedTab?: string
   onSelectTab?: (key: string) => Message
   gestures?: ReadonlyArray<StrictGesture<Message>>
@@ -318,7 +319,8 @@ export const toStrictHtml = <Message>(
       Option.match(Array.last(screens), {
         onNone: () => builder.empty,
         onSome: screen => {
-          const { onDismissed } = readNavigation(attributes)
+          const { onDismissed, isBackTitleVisible = true } =
+            readNavigation(attributes)
           const back =
             screens.length > 1 && onDismissed !== undefined
               ? builder.button(
@@ -327,7 +329,7 @@ export const toStrictHtml = <Message>(
                     builder.OnClick(onDismissed(1)),
                     builder.AriaLabel('Back'),
                   ],
-                  ['Back'],
+                  [isBackTitleVisible ? 'Back' : '‹'],
                 )
               : builder.empty
 
@@ -457,6 +459,8 @@ export const toStrictHtml = <Message>(
     Title: title => navigationAttribute({ title }),
     TabIcon: tabIcon => navigationAttribute({ tabIcon }),
     OnDismissed: onDismissed => navigationAttribute({ onDismissed }),
+    BackTitleVisible: isBackTitleVisible =>
+      navigationAttribute({ isBackTitleVisible }),
     SelectedTab: selectedTab => navigationAttribute({ selectedTab }),
     OnSelectTab: onSelectTab => navigationAttribute({ onSelectTab }),
     ImmediateTabSelection: () => navigationAttribute({}),

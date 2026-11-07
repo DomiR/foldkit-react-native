@@ -156,6 +156,7 @@ export const makeNativeBuilder = <Message>(): NativeBuilder<Message> => {
     Title: title => ({ title }),
     TabIcon: tabIcon => ({ tabIcon }),
     OnDismissed: onDismissed => ({ onDismissed }),
+    BackTitleVisible: isBackTitleVisible => ({ isBackTitleVisible }),
     SelectedTab: selectedTab => ({ selectedTab }),
     OnSelectTab: onSelectTab => ({ onSelectTab }),
     ImmediateTabSelection: isTabSelectionImmediate => ({

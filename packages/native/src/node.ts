@@ -21,6 +21,7 @@ export type NativeAttributes<Message> = Readonly<{
   title?: string
   tabIcon?: StrictIcon
   onDismissed?: (dismissedCount: number) => Message
+  isBackTitleVisible?: boolean
   selectedTab?: string
   onSelectTab?: (key: string) => Message
   isTabSelectionImmediate?: boolean

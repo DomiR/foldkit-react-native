@@ -242,7 +242,7 @@ export const NativeStack = <Message,>({
     setNode(modelNode)
   }
 
-  const { onDismissed } = node.attributes
+  const { onDismissed, isBackTitleVisible = true } = node.attributes
   const isStackActive = isActive && isStackUpdateAllowed
   const inheritedBackground = React.useContext(NavigationBackgroundContext)
   const stackBackground =
@@ -308,6 +308,7 @@ export const NativeStack = <Message,>({
               title: attributes.title ?? screen.key,
               hidden: false,
               hideBackButton: screenIndex === 0 || !hasBack,
+              ...(isBackTitleVisible ? {} : { backTitleVisible: false }),
             }}
             preventNativeDismiss={!isStackUpdateAllowed}
             nativeBackButtonDismissalEnabled={true}
