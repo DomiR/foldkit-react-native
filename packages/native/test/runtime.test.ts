@@ -37,8 +37,9 @@ const Message = defineMessageUnion({
   ClickedLink: { request: UrlRequest },
 })
 type Message = typeof Message.Type
+type TestResources = Command.HandlerOf<typeof WaitForIncrement>
 type NonRoutingProgramConfig = Extract<
-  NativeProgramConfig<Model, Message>,
+  NativeProgramConfig<Model, Message, TestResources>,
   Readonly<{ routing?: undefined }>
 >
 const INIT_INDEX = -1
@@ -48,10 +49,13 @@ const BOOT_TIMEOUT_MS = 100
 
 const WaitForIncrement = Command.define('WaitForIncrement', {
   messages: [Message.CompletedWaitForIncrement],
-  execute: Effect.as(
-    Effect.sleep(BACKGROUND_DELAY_MS),
-    Message.CompletedWaitForIncrement(),
-  ),
+  handler: function* () {
+    return () =>
+      Effect.as(
+        Effect.sleep(BACKGROUND_DELAY_MS),
+        Message.CompletedWaitForIncrement(),
+      )
+  },
 })
 
 const update = (model: Model, message: Message) =>
@@ -103,11 +107,12 @@ const makeRuntimeFixture = () => {
   const flushMessages = () => vi.advanceTimersByTimeAsync(DRAIN_TURN_MS)
 
   const startProgram = async (
-    config: NativeProgramConfig<Model, Message>,
+    config: NativeProgramConfig<Model, Message, TestResources>,
     expectedCount = 0,
   ) => {
     const program = makeNativeProgram({
       id: `native-runtime-test-${programs.length}`,
+      resources: WaitForIncrement.layer,
       ...config,
     })
     programs.push(program)

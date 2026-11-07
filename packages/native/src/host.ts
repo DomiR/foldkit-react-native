@@ -52,7 +52,6 @@ export const makeNativeHost = <Message>(
     configuredFlags,
     isFlagsRequired,
     FlagsCodec,
-    provideResources,
   }) => {
     if (bootMode === 'Hydrate') {
       return Effect.die(
@@ -73,7 +72,7 @@ export const makeNativeHost = <Message>(
           : Schema.decodeUnknownEffect(Schema.toType(FlagsCodec))(
               undefined,
             ).pipe(Effect.orDie),
-      onSome: provideResources,
+      onSome: Function.identity,
     })
 
     return Effect.succeed({ resolveFlags, rendererState: undefined })
@@ -104,7 +103,7 @@ export const makeNativeHost = <Message>(
   },
   makeModelPreserver: () => Effect.succeed(() => Effect.void),
   afterInitialRender: Effect.void,
-  connectDevTools: (store, enqueueMessageEffect) =>
+  connectDevTools: (store, prepareDispatch) =>
     Option.match(maybeDevTools, {
       onNone: () => Effect.void,
       onSome: ({ url, metadata, maybeMessageSchema }) =>
@@ -112,8 +111,8 @@ export const makeNativeHost = <Message>(
           store,
           makeNativeWebSocketChannel(url),
           () => metadata,
-          enqueueMessageEffect,
           maybeMessageSchema,
+          prepareDispatch,
         ),
     }),
 })

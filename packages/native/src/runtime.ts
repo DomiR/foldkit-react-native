@@ -502,7 +502,7 @@ export const makeNativeProgram = <
     ...(config.managedResources && {
       managedResources: config.managedResources,
     }),
-    resources,
+    applicationLayer: resources,
     ...(config.crash && { crash: config.crash }),
     devTools: Option.isSome(maybeDevTools) ? maybeDevTools.value.config : false,
     renderer,
