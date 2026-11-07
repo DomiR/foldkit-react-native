@@ -35,6 +35,9 @@ export type BlockRuntimeConfig<HostState> = Readonly<{
   devTools?: DevToolsConfig
   renderer: RuntimeRenderer<any, any, HostState>
   host: RuntimeHost<any, HostState>
+  /** Receives the completed root Block before its first render, for example
+   * to attach it to the builder of a strict view with child Blocks. */
+  onComplete?: (block: object) => void
 }>
 
 /** A runtime program whose scoped `start` Effect runs the Block graph.
@@ -60,6 +63,7 @@ const startCompletedBlock = <HostState>(
   preservedModel: unknown,
   memoMap: Layer.MemoMap | undefined,
 ): Effect.Effect<void> => {
+  config.onComplete?.(block)
   const lowered = lowerBlock(block)
   const devTools = toRuntimeDevTools(config.devTools, block.Message)
   const program = makeRuntime({

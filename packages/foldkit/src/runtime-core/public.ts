@@ -1,4 +1,4 @@
-export { makeBlockRuntime, makeRuntimeCore } from './index.js'
+export { __bindBlockGraph, makeBlockRuntime, makeRuntimeCore } from './index.js'
 export type { BlockRuntimeConfig, BlockRuntimeProgram } from './index.js'
 export { startDevToolsBridge } from './index.js'
 export type {

@@ -1,6 +1,7 @@
 export { makeRuntime as makeRuntimeCore } from '../runtime/runtime.js'
 export type { RuntimeCoreConfig } from '../runtime/runtime.js'
 export { makeBlockRuntime } from '../runtime/blockRuntime.js'
+export { __bindBlockGraph } from '../strict/embedBlock.js'
 export type {
   BlockRuntimeConfig,
   BlockRuntimeProgram,

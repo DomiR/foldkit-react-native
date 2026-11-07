@@ -16,6 +16,7 @@ export {
   Swipe,
 } from './gesture.js'
 export { mapMessages } from './mapMessages.js'
+export { embedBlock, embedKeyedBlock } from './embedBlock.js'
 export { createStrictLazy, createStrictKeyedLazy } from './lazy.js'
 export type { StrictLazyView } from './lazy.js'
 
