@@ -74,7 +74,10 @@ const startCompletedBlock = <HostState>(
     Flags: Schema.Void,
     configuredFlags: Option.none(),
     isFlagsRequired: false,
-    init: lowered.init,
+    init:
+      config.routing === undefined
+        ? () => lowered.init()
+        : (_flags: void, url?: unknown) => lowered.init(url),
     update: lowered.update,
     subscriptions: lowered.subscriptions,
     managedResources: lowered.managedResources,
