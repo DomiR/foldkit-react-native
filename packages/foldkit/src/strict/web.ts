@@ -1,4 +1,4 @@
-import { Array, Option } from 'effect'
+import { Array, Option, Predicate } from 'effect'
 
 import { isChildAttribute } from '../html/childAttribute.js'
 import type { Attribute, Html, HtmlBuilder } from '../html/index.js'
@@ -7,10 +7,15 @@ import type {
   AnimatedStyleBinding,
   StrictLayoutAnimation,
 } from './animation.js'
+import {
+  type HostBlockEmbedding,
+  HostBlockEmbeddingTypeId,
+} from './embedBlock.js'
 import type { StrictGesture } from './gesture.js'
 import type { StrictIcon } from './icon.js'
 import type {
   StrictHtmlBuilder,
+  StrictView,
   StrictScreen,
   StrictStyle,
   StrictTag,
@@ -482,6 +487,54 @@ export const toStrictHtml = <Message>(
     Disabled: h.Disabled,
     Checked: h.Checked,
   }
+
+  const childViews = new WeakMap<
+    StrictView<any, any>,
+    (model: unknown, childH: HtmlBuilder<unknown>) => Html
+  >()
+  const childViewFor = (view: StrictView<any, any>) => {
+    const cached = childViews.get(view)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const childView = (model: unknown, childH: HtmlBuilder<unknown>): Html =>
+      view(model, toStrictHtml(childH, animationHost))
+    childViews.set(view, childView)
+    return childView
+  }
+  const embedBlockThroughHtml: HostBlockEmbedding = (
+    binding,
+    maybeKey,
+    model,
+    view,
+  ) => {
+    const embedView = Reflect.get(binding, 'embedView')
+    const block = Reflect.get(h, 'block')
+    if (!Predicate.isFunction(embedView) || !Predicate.isFunction(block)) {
+      throw new Error(
+        '[foldkit] embedBlock on the web requires a Block view builder and a child Binding.',
+      )
+    }
+
+    const slotId =
+      maybeKey === undefined
+        ? globalThis.String(Reflect.get(binding, 'placement'))
+        : globalThis.String(maybeKey.key)
+    const embedding = Reflect.apply(embedView, binding, [
+      {
+        ...maybeKey,
+        slotId,
+        model,
+        view: childViewFor(view),
+      },
+    ])
+    return Reflect.apply(block, h, [embedding])
+  }
+  Object.defineProperty(builder, HostBlockEmbeddingTypeId, {
+    value: embedBlockThroughHtml,
+    enumerable: true,
+  })
 
   return builder
 }

@@ -8,6 +8,30 @@ import { mapMessages } from './mapMessages.js'
 import type { StrictHtmlBuilder, StrictView } from './strict.js'
 
 const unkeyed = Symbol('unkeyed')
+
+/** A host's own child Block rendering, attached to its strict builder. The
+ * web host renders through `h.block`, so child Messages carry their
+ * occurrence generation and child Mounts are scoped to the child. @internal */
+export type HostBlockEmbedding = (
+  binding: object,
+  maybeKey: Readonly<{ key: unknown }> | undefined,
+  model: unknown,
+  view: StrictView<any, any>,
+) => unknown
+
+/** @internal Marks a strict builder whose host renders child Blocks itself. */
+export const HostBlockEmbeddingTypeId = Symbol.for(
+  'foldkit/strict/HostBlockEmbedding',
+)
+
+const hostEmbeddingOf = (h: object): HostBlockEmbedding | undefined => {
+  const embedding = Reflect.get(h, HostBlockEmbeddingTypeId)
+  return Predicate.isFunction(embedding)
+    ? // NOTE: only toStrictHtml installs a function under this key.
+      /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+      (embedding as HostBlockEmbedding)
+    : undefined
+}
 const builderGraphs = new WeakMap<object, object>()
 const resolvedBindings = new WeakMap<object, WeakMap<object, object>>()
 const mappers = new WeakMap<
@@ -26,6 +50,8 @@ export const __bindBlockGraph = <Builder extends object>(
   builderGraphs.set(bound, graph)
   return bound
 }
+
+const identityDeclaration = (declaration: object): object => declaration
 
 const resolveBinding = (graph: object, declaration: unknown): object => {
   if (!Predicate.isObject(declaration)) {
@@ -73,6 +99,18 @@ const embed = <ChildModel, ChildMessage, ParentMessage, Node, Attribute>(
   model: ChildModel,
   view: StrictView<ChildModel, ChildMessage>,
 ): Node => {
+  const hostEmbedding = hostEmbeddingOf(h)
+  if (hostEmbedding !== undefined) {
+    // NOTE: the host renders a node of its own Node type for this builder.
+    /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+    return hostEmbedding(
+      Reflect.apply(identityDeclaration, undefined, [declaration]),
+      key === unkeyed ? undefined : { key },
+      model,
+      view,
+    ) as Node
+  }
+
   const graph = builderGraphs.get(h)
   if (graph === undefined) {
     throw new Error(
