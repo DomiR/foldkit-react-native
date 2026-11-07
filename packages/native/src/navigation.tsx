@@ -16,8 +16,10 @@ import Animated, {
 import { ScreenStack, ScreenStackItem, Tabs } from 'react-native-screens'
 import { SafeAreaView } from 'react-native-screens/experimental'
 
+import { useIsActive } from './activeContext'
 import { collectNativeAttributes } from './builder'
 import { useKeyboardHeight } from './keyboard'
+import { unwrapLazy } from './lazy'
 import { ListScrollContext } from './list'
 import type {
   NativeAttributes,
@@ -49,7 +51,7 @@ const isNavigationContent = <Message,>(
     child =>
       child !== null &&
       !Predicate.isString(child) &&
-      (child._tag === 'Stack' || child._tag === 'Tabs'),
+      (unwrapLazy(child)._tag === 'Stack' || unwrapLazy(child)._tag === 'Tabs'),
   )
 
 const containsList = <Message,>(
@@ -60,9 +62,10 @@ const containsList = <Message,>(
       return false
     }
 
+    const node = unwrapLazy(child)
     return (
-      child._tag === 'List' ||
-      (child._tag === 'Element' && containsList(child.children))
+      node._tag === 'List' ||
+      (node._tag === 'Element' && containsList(node.children))
     )
   })
 
@@ -202,24 +205,40 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1 },
 })
 
+const hasSameScreens = <Message,>(
+  current: StackNode<Message>,
+  next: StackNode<Message>,
+): boolean =>
+  current.screens.length === next.screens.length &&
+  current.screens.every(
+    (screen, index) => screen.key === next.screens[index]?.key,
+  )
+
 /** Renders the Model's screens and reports native back actions as Messages. */
 export const NativeStack = <Message,>({
   node: modelNode,
   dispatch,
   renderContent,
-  isActive,
+  isActive: isActiveProp,
 }: Readonly<{
   node: StackNode<Message>
   dispatch: (message: Message) => void
   renderContent: RenderContent<Message>
   isActive: boolean
 }>): React.ReactElement => {
+  const isActive = useIsActive(isActiveProp)
   const isStackUpdateAllowed = React.useContext(StackUpdatesContext)
   const [node, setNode] = React.useState(modelNode)
 
   // NOTE: iOS can corrupt a hidden UINavigationController's header when its
-  // stack changes in the tab-selection commit. Wait for the tab's didAppear.
-  if (isStackUpdateAllowed && node !== modelNode) {
+  // stack changes in the tab-selection commit, so a hidden stack waits for the
+  // tab's didAppear before screens are pushed or popped. Content changes that
+  // keep the same screens, such as a theme change, apply at once; otherwise
+  // the hidden tab shows stale content until it appears.
+  if (
+    node !== modelNode &&
+    (isStackUpdateAllowed || hasSameScreens(node, modelNode))
+  ) {
     setNode(modelNode)
   }
 
@@ -370,19 +389,73 @@ const NativeTabBody = <Message,>({
   }
 }
 
-/** Uses the public native Tabs API with selection requests derived from the Model. */
+type TabSelectedEvent = Readonly<{
+  nativeEvent: Readonly<{
+    selectedScreenKey: string
+    provenance: number
+    isRepeated: boolean
+    actionOrigin:
+      | 'user'
+      | 'programmatic-js'
+      | 'programmatic-native'
+      | 'implicit'
+  }>
+}>
+
+/** Tracks the native provenance the Model has seen for immediate selection.
+ * A selection the Model did not request (a tap, or a platform change) records
+ * its provenance. The next tabs node the view produces was built after update
+ * handled that selection, because the runtime publishes no frame while
+ * Messages wait, so its request is based on that provenance. Native then
+ * rejects a request that a newer tap has made stale. */
+const useImmediateSelectionBase = <Message,>(
+  node: TabsNode<Message>,
+): Readonly<{
+  baseProvenance: number
+  recordSelection: (provenance: number) => void
+}> => {
+  const latestSelectionProvenance = React.useRef(0)
+  const seen = React.useRef({ node, provenance: 0 })
+
+  // NOTE: the provenance belongs to the first render of each new node, the
+  // frame built after update ran. Recording it is idempotent for one node, so
+  // a render React discards leaves the same value for the committed render.
+  if (seen.current.node !== node) {
+    seen.current = { node, provenance: latestSelectionProvenance.current }
+  }
+
+  return {
+    baseProvenance: seen.current.provenance,
+    recordSelection: provenance => {
+      latestSelectionProvenance.current = Math.max(
+        latestSelectionProvenance.current,
+        provenance,
+      )
+    },
+  }
+}
+
+/** Uses the public native Tabs API with selection requests derived from the
+ * Model. By default the tab bar waits for the Model; with
+ * `ImmediateTabSelection(true)` it switches on tap and the Model follows. */
 export const NativeTabs = <Message,>({
   node,
   dispatch,
   renderContent,
-  isActive,
+  isActive: isActiveProp,
 }: Readonly<{
   node: TabsNode<Message>
   dispatch: (message: Message) => void
   renderContent: RenderContent<Message>
   isActive: boolean
 }>): React.ReactElement => {
-  const { selectedTab, onSelectTab } = node.attributes
+  const isActive = useIsActive(isActiveProp)
+  const {
+    selectedTab,
+    onSelectTab,
+    isTabSelectionImmediate = false,
+  } = node.attributes
+  const { baseProvenance, recordSelection } = useImmediateSelectionBase(node)
   const isParentStackUpdateAllowed = React.useContext(StackUpdatesContext)
   const [maybeVisibleTabKey, setMaybeVisibleTabKey] = React.useState<
     Option.Option<string>
@@ -392,28 +465,44 @@ export const NativeTabs = <Message,>({
     Option.fromNullishOr(selectedTab),
     () => Option.map(Array.head(node.tabs), tab => tab.key),
   )
+  const requestedKey = Option.getOrElse(maybeSelectedKey, () => '')
+  const requestBase = isTabSelectionImmediate ? baseProvenance : 0
+  const navStateRequest = React.useMemo(
+    () => ({ selectedScreenKey: requestedKey, baseProvenance: requestBase }),
+    [requestedKey, requestBase],
+  )
+  const handleTabSelected = (event: TabSelectedEvent): void => {
+    const { selectedScreenKey, provenance, isRepeated, actionOrigin } =
+      event.nativeEvent
+    if (actionOrigin === 'programmatic-js') {
+      return
+    }
+
+    if (isTabSelectionImmediate) {
+      recordSelection(provenance)
+      // NOTE: the tab bar has already switched, so update hears every new
+      // selection, including a return to the tab the Model still selects
+      // while an earlier tap is on its way.
+      if (!isRepeated && onSelectTab !== undefined) {
+        dispatch(onSelectTab(selectedScreenKey))
+      }
+    } else if (
+      isActive &&
+      selectedScreenKey !== requestedKey &&
+      onSelectTab !== undefined
+    ) {
+      dispatch(onSelectTab(selectedScreenKey))
+    }
+  }
 
   return Option.match(maybeSelectedKey, {
     onNone: () => <View />,
     onSome: selectedKey => (
       <View style={{ flex: 1, ...node.attributes.style }}>
         <Tabs.Host
-          navStateRequest={{
-            selectedScreenKey: selectedKey,
-            baseProvenance: 0,
-          }}
-          rejectStaleNavStateUpdates={false}
-          onTabSelected={event => {
-            const { selectedScreenKey, actionOrigin } = event.nativeEvent
-            if (
-              isActive &&
-              actionOrigin !== 'programmatic-js' &&
-              selectedScreenKey !== selectedKey &&
-              onSelectTab !== undefined
-            ) {
-              dispatch(onSelectTab(selectedScreenKey))
-            }
-          }}
+          navStateRequest={navStateRequest}
+          rejectStaleNavStateUpdates={isTabSelectionImmediate}
+          onTabSelected={handleTabSelected}
           onTabSelectionPrevented={event => {
             if (isActive && onSelectTab !== undefined) {
               dispatch(onSelectTab(event.nativeEvent.preventedScreenKey))
@@ -461,7 +550,7 @@ export const NativeTabs = <Message,>({
                         },
                       }),
                 }}
-                preventNativeSelection={true}
+                preventNativeSelection={!isTabSelectionImmediate}
                 specialEffects={{
                   repeatedTabSelection: {
                     popToRoot: false,

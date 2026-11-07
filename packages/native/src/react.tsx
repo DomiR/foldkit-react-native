@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
 import { toAccessibilityProps } from './accessibility'
+import { NativeActiveContext } from './activeContext'
 import {
   NativeAnimatedElement,
   type NativeMotion,
@@ -15,6 +16,7 @@ import { NativeAnimationContext } from './animationContext'
 import { NativeGestures } from './gestures'
 import type { NativeInstrumentation } from './instrumentation'
 import { NativeKeyboardProvider } from './keyboard'
+import { unwrapLazy } from './lazy'
 import { NativeList } from './list'
 import { NativeStack, NativeTabs } from './navigation'
 import type {
@@ -26,7 +28,11 @@ import type {
 import { withReducedMotion } from './reducedMotion'
 import type { NativeProgram } from './runtime'
 import { toTextAreaStyle } from './textArea'
-import { NativeInputContext, NativeTextInput } from './textInput'
+import {
+  NativeInputContext,
+  NativeInputRevisionContext,
+  NativeTextInput,
+} from './textInput'
 import { useReducedMotion } from './useReducedMotion'
 
 declare const performance: Readonly<{ now: () => number }>
@@ -35,9 +41,10 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 const AnimatedSwitch = Animated.createAnimatedComponent(Switch)
 
 const toReactKey = <Message,>(
-  node: NativeNode<Message>,
+  lazyNode: NativeNode<Message>,
   ordinal: number,
 ): string | undefined => {
+  const node = unwrapLazy(lazyNode)
   const identity = node._tag === 'Empty' ? undefined : node.identity
   const userKey =
     node._tag === 'Element' || node._tag === 'List' ? node.key : undefined
@@ -67,7 +74,9 @@ const toChildReactKeys = <Message,>(
         return [identityOrdinals, undefined]
       }
 
-      const { identity } = child
+      const unwrapped = unwrapLazy(child)
+      const identity =
+        unwrapped._tag === 'Empty' ? undefined : unwrapped.identity
       if (identity === undefined) {
         return [identityOrdinals, toReactKey(child, 0)]
       }
@@ -348,7 +357,6 @@ const renderElement = <Message,>(
       } else {
         return React.createElement(NativeTextInput, {
           motion,
-          renderRevision: node.inputRevision ?? 0,
           ...props,
           style: textStyle,
           value: attributes.value,
@@ -369,7 +377,6 @@ const renderElement = <Message,>(
     Match.when({ tag: 'textarea' }, () =>
       React.createElement(NativeTextInput, {
         motion,
-        renderRevision: node.inputRevision ?? 0,
         ...props,
         style: toTextAreaStyle(attributes.rows, textStyle),
         value: attributes.value,
@@ -397,6 +404,63 @@ const renderElement = <Message,>(
   )
 }
 
+const isTextStyleEqual = (previous: TextStyle, next: TextStyle): boolean => {
+  const previousEntries = Object.entries(previous)
+  const nextValues = new Map(Object.entries(next))
+  return (
+    previousEntries.length === nextValues.size &&
+    previousEntries.every(
+      ([key, value]) => nextValues.has(key) && nextValues.get(key) === value,
+    )
+  )
+}
+
+const useStableTextStyle = (textStyle: TextStyle): TextStyle => {
+  const stable = React.useRef(textStyle)
+  if (!isTextStyleEqual(stable.current, textStyle)) {
+    stable.current = textStyle
+  }
+  return stable.current
+}
+
+/** Skips a reused Lazy subtree. Returning the same React element lets React
+ * bail out of the whole subtree. Activity reaches the subtree through context,
+ * so selecting another tab re-renders only the components that act on it. */
+const NativeLazy = <Message,>({
+  node,
+  dispatch,
+  textStyle,
+  isActive,
+  isReducedMotion,
+}: Readonly<{
+  node: NativeNode<Message>
+  dispatch: (message: Message) => void
+  textStyle: TextStyle
+  isActive: boolean
+  isReducedMotion: boolean
+}>): React.ReactElement => {
+  const isParentActive = React.useContext(NativeActiveContext)
+  const stableTextStyle = useStableTextStyle(textStyle)
+  const element = React.useMemo(
+    () =>
+      renderNode(
+        node,
+        dispatch,
+        stableTextStyle,
+        true,
+        undefined,
+        isReducedMotion,
+      ),
+    [node, dispatch, stableTextStyle, isReducedMotion],
+  )
+
+  return React.createElement(
+    NativeActiveContext.Provider,
+    { value: isParentActive && isActive },
+    element,
+  )
+}
+
 const renderNode = <Message,>(
   node: NativeNode<Message>,
   dispatch: (message: Message) => void,
@@ -418,7 +482,10 @@ const renderNode = <Message,>(
       undefined,
       isReducedMotion,
     )
-  const gestures = node._tag === 'Empty' ? undefined : node.attributes.gestures
+  const gestures =
+    node._tag === 'Empty' || node._tag === 'Lazy'
+      ? undefined
+      : node.attributes.gestures
   const hasGestures =
     gestures !== undefined && Array.isReadonlyArrayNonEmpty(gestures)
   const nodeReactKey = hasGestures ? undefined : reactKey
@@ -426,6 +493,15 @@ const renderNode = <Message,>(
     Match.withReturnType<React.ReactElement | null>(),
     Match.tagsExhaustive({
       Empty: () => null,
+      Lazy: ({ node }) =>
+        React.createElement(NativeLazy<Message>, {
+          key: reactKey,
+          node,
+          dispatch,
+          textStyle: inheritedTextStyle,
+          isActive,
+          isReducedMotion,
+        }),
       Element: element => {
         const { attributes } = element
         const style = attributes.style
@@ -512,7 +588,7 @@ const renderNode = <Message,>(
     return null
   }
 
-  if (node._tag === 'List') {
+  if (node._tag === 'List' || node._tag === 'Lazy') {
     return rendered
   }
 
@@ -540,18 +616,22 @@ const renderRoot = <Model, Message>(
       NativeInputContext.Provider,
       { value: program.recordInputEvent },
       React.createElement(
-        GestureHandlerRootView,
-        { style: { flex: 1 } },
-        React.createElement(NativeKeyboardProvider, {
-          children: renderNode(
-            node,
-            program.dispatch,
-            {},
-            true,
-            toReactKey(node, 0),
-            isReducedMotion,
-          ),
-        }),
+        NativeInputRevisionContext.Provider,
+        { value: program.getSnapshotInputRevision() },
+        React.createElement(
+          GestureHandlerRootView,
+          { style: { flex: 1 } },
+          React.createElement(NativeKeyboardProvider, {
+            children: renderNode(
+              node,
+              program.dispatch,
+              {},
+              true,
+              toReactKey(node, 0),
+              isReducedMotion,
+            ),
+          }),
+        ),
       ),
     ),
   )

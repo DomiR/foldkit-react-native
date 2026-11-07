@@ -1,3 +1,4 @@
+import type { Option } from 'effect'
 import type {
   StrictGesture,
   StrictIcon,
@@ -22,6 +23,7 @@ export type NativeAttributes<Message> = Readonly<{
   onDismissed?: (dismissedCount: number) => Message
   selectedTab?: string
   onSelectTab?: (key: string) => Message
+  isTabSelectionImmediate?: boolean
   gestures?: ReadonlyArray<StrictGesture<Message>>
   animatedStyles?: ReadonlyArray<AnimatedStyleBinding>
   entering?: StrictLayoutAnimation
@@ -63,7 +65,6 @@ export type NativeNode<Message> =
   | (Readonly<{
       _tag: 'Element'
       tag: NativeTag
-      inputRevision?: number
       key: string | undefined
       attributes: NativeAttributes<Message>
       children: ReadonlyArray<NativeChild<Message>>
@@ -90,7 +91,22 @@ export type NativeNode<Message> =
       tabs: ReadonlyArray<NativeTab<Message>>
     }> &
       NativeNodeIdentity)
+  | Readonly<{
+      /** A node reused by `createStrictLazy` while its inputs are unchanged.
+       * The renderer skips the subtree while the same Lazy node is rendered. */
+      _tag: 'Lazy'
+      node: NativeNode<Message>
+      /** The node's first sticky footer and the rest of the node, computed
+       * once so a lifted footer and body keep stable references. */
+      liftStickyFooter: () => Option.Option<NativeFooterLift<Message>>
+    }>
   | Readonly<{ _tag: 'Empty' }>
+
+/** A sticky footer lifted out of a screen body, and the body without it. */
+export type NativeFooterLift<Message> = Readonly<{
+  footer: NativeNode<Message>
+  children: ReadonlyArray<NativeChild<Message>>
+}>
 
 /** An element, text, or an omitted child. */
 export type NativeChild<Message> = NativeNode<Message> | string | null

@@ -1,6 +1,7 @@
 import { Array, Option } from 'effect'
 
 import type { Attribute, Html, HtmlBuilder } from '../html/index.js'
+import { createKeyedLazy } from '../html/lazy.js'
 import type {
   AnimatedStyleBinding,
   StrictLayoutAnimation,
@@ -31,6 +32,21 @@ type NavigationAttributes<Message> = Readonly<{
   onTransitionEnd?: Message
   onEndReached?: Message
 }>
+
+const unkeyedLazy = Symbol('unkeyed')
+const webLazySlots = new WeakMap<object, ReturnType<typeof createKeyedLazy>>()
+
+const resolveWebLazy = <Args extends ReadonlyArray<unknown>>(
+  slot: object,
+  key: PropertyKey | undefined,
+  view: (...args: Args) => Html,
+  args: Args,
+): Html => {
+  const keyedLazy = webLazySlots.get(slot) ?? createKeyedLazy()
+  webLazySlots.set(slot, keyedLazy)
+
+  return keyedLazy(key ?? unkeyedLazy, view, args)
+}
 
 const layoutDefaults: Record<string, string> = {
   display: 'flex',
@@ -434,8 +450,10 @@ export const toStrictHtml = <Message>(
     OnDismissed: onDismissed => navigationAttribute({ onDismissed }),
     SelectedTab: selectedTab => navigationAttribute({ selectedTab }),
     OnSelectTab: onSelectTab => navigationAttribute({ onSelectTab }),
+    ImmediateTabSelection: () => navigationAttribute({}),
     Gesture: gesture => navigationAttribute({ gestures: [gesture] }),
     empty: h.empty,
+    lazy: resolveWebLazy,
     Style: style => {
       const attribute = h.Style(toCssProperties(style))
       styleValues.set(attribute, style)

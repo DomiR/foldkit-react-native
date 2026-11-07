@@ -22,6 +22,7 @@ import {
 } from '../snabbdom/index.js'
 import type { VNode } from '../vdom.js'
 import { FadeIn } from './animation.js'
+import { createStrictKeyedLazy, createStrictLazy } from './lazy.js'
 import { mapMessages } from './mapMessages.js'
 import { toStrictHtml } from './web.js'
 
@@ -408,5 +409,69 @@ describe('strict footer elements', () => {
     expect(element.style.position).toBe('relative')
     expect(element.style.bottom).toBe('')
     expect(element.style.zIndex).toBe('')
+  })
+})
+
+const renderInStableFrame = (): ((buildView: () => Html) => Html) => {
+  const dispatchSync: DispatchSync = message => {
+    dispatched.push(message)
+  }
+  const context = Context.make(
+    Dispatch,
+    Dispatch.of({ dispatchAsync: () => Effect.void, dispatchSync }),
+  ).pipe(Context.add(MountTracker, { started: () => {}, ended: () => {} }))
+
+  return buildView => {
+    setRuntime(dispatchSync, context)
+    try {
+      return buildView()
+    } finally {
+      clearRuntime()
+    }
+  }
+}
+
+describe('createStrictLazy', () => {
+  it('reuses the cached node while the builder and arguments are unchanged', () => {
+    const lazy = createStrictLazy()
+    const renderView = renderInStableFrame()
+    const view = vi.fn((builder: typeof strict, label: string): Html =>
+      builder.p([], [label]),
+    )
+
+    const first = renderView(() => lazy(strict, view, ['First']))
+    const second = renderView(() => lazy(strict, view, ['First']))
+    const third = renderView(() => lazy(strict, view, ['Second']))
+
+    expect(second).toBe(first)
+    expect(third).not.toBe(first)
+    expect(view).toHaveBeenCalledTimes(2)
+  })
+
+  it('caches each key independently', () => {
+    const lazy = createStrictKeyedLazy()
+    const renderView = renderInStableFrame()
+    const view = vi.fn((builder: typeof strict, label: string): Html =>
+      builder.p([], [label]),
+    )
+
+    const first = renderView(() => lazy('a', strict, view, ['A']))
+    renderView(() => lazy('b', strict, view, ['B']))
+    const again = renderView(() => lazy('a', strict, view, ['A']))
+
+    expect(again).toBe(first)
+    expect(view).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('mapMessages', () => {
+  it('returns the same builder for the same parent builder and function', () => {
+    const toParent = (_message: ChildMessage): Message =>
+      Message.SubmittedChild()
+
+    expect(mapMessages(strict, toParent)).toBe(mapMessages(strict, toParent))
+    expect(
+      mapMessages(strict, (_message: ChildMessage) => Message.Submitted()),
+    ).not.toBe(mapMessages(strict, toParent))
   })
 })

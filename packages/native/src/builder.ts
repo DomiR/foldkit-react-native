@@ -7,6 +7,7 @@ import type {
   NativeNode,
   NativeTag,
 } from './node'
+import { makeLazyNode } from './stickyFooter'
 
 /** A strict builder with an additional native key attribute. */
 export type NativeBuilder<Message> = StrictHtmlBuilder<
@@ -42,11 +43,25 @@ export const collectNativeAttributes = <Message>(
     {},
   )
 
-/** Creates a portable builder whose elements contain data and event mappers.
- * Native runtimes stamp text control frames with the latest reported edit revision. */
-export const makeNativeBuilder = <Message>(
-  readInputRevision: () => number = () => 0,
-): NativeBuilder<Message> => {
+type LazyEntry<Message> = Readonly<{
+  view: Function
+  args: ReadonlyArray<unknown>
+  node: NativeNode<Message>
+}>
+
+const isEveryArgumentEqual = (
+  previous: ReadonlyArray<unknown>,
+  current: ReadonlyArray<unknown>,
+): boolean =>
+  previous.length === current.length &&
+  previous.every((argument, index) => argument === current[index])
+
+/** Creates a portable builder whose elements contain data and event mappers. */
+export const makeNativeBuilder = <Message>(): NativeBuilder<Message> => {
+  const lazySlots = new WeakMap<
+    object,
+    Map<PropertyKey | undefined, LazyEntry<Message>>
+  >()
   const buildElement = (
     tag: NativeTag,
     attributes: ReadonlyArray<NativeAttribute<Message>>,
@@ -59,9 +74,6 @@ export const makeNativeBuilder = <Message>(
     return {
       _tag: 'Element',
       tag,
-      ...(tag === 'input' || tag === 'textarea'
-        ? { inputRevision: readInputRevision() }
-        : {}),
       key: key ?? attributeKey,
       attributes: elementAttributes,
       children,
@@ -146,8 +158,30 @@ export const makeNativeBuilder = <Message>(
     OnDismissed: onDismissed => ({ onDismissed }),
     SelectedTab: selectedTab => ({ selectedTab }),
     OnSelectTab: onSelectTab => ({ onSelectTab }),
+    ImmediateTabSelection: isTabSelectionImmediate => ({
+      isTabSelectionImmediate,
+    }),
     Gesture: gesture => ({ gestures: [gesture] }),
     empty: { _tag: 'Empty' },
+    lazy: (slot, key, view, args) => {
+      const entries =
+        lazySlots.get(slot) ??
+        new Map<PropertyKey | undefined, LazyEntry<Message>>()
+      lazySlots.set(slot, entries)
+      const entry = entries.get(key)
+
+      if (
+        entry !== undefined &&
+        entry.view === view &&
+        isEveryArgumentEqual(entry.args, args)
+      ) {
+        return entry.node
+      }
+
+      const node = makeLazyNode(view(...args))
+      entries.set(key, { view, args, node })
+      return node
+    },
     Style: style => ({ style }),
     OnClick: message => ({ onClick: message }),
     OnInput: toMessage => ({ onInput: toMessage }),

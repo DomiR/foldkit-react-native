@@ -126,6 +126,10 @@ export type NativeProgram<Model, Message> = Readonly<{
   animationHost: NativeAnimationHost
   /** Advances the host's editing protocol for input adapters. @internal */
   recordInputEvent: () => number
+  /** The edit revision the published frame's view saw. Text inputs read it
+   * per frame, so an input in a reused Lazy subtree still sees new frames.
+   * @internal */
+  getSnapshotInputRevision: () => number
   /** Releases replay interaction gating after React commits the live snapshot. @internal */
   acknowledgeCommittedSnapshot: (snapshot: NativeNode<Message>) => void
   /** @internal */
@@ -162,7 +166,7 @@ export const makeNativeProgram = <
   const ModelCodec =
     config.Model ?? Schema.declare<Model>((_value): _value is Model => true)
   let inputRevision = 0
-  const h = makeNativeBuilder<Message>(() => inputRevision)
+  const h = makeNativeBuilder<Message>()
   const id = config.id ?? 'main'
   const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
   const update = Option.match(maybeInstrumentation, {
@@ -194,6 +198,7 @@ export const makeNativeProgram = <
   }
   const listeners = new Set<() => void>()
   let snapshot = h.div([])
+  let snapshotInputRevision = 0
   let maybeReadLiveModel = Option.none<() => Model>()
   let enqueueMessage = (_message: Message): void => {}
   let isDisposed = false
@@ -206,6 +211,7 @@ export const makeNativeProgram = <
 
   const publish = (node: NativeNode<Message>): void => {
     snapshot = node
+    snapshotInputRevision = inputRevision
     for (const listener of Array.fromIterable(listeners)) {
       if (isDisposed) {
         break
@@ -516,6 +522,7 @@ export const makeNativeProgram = <
   const program: NativeProgram<Model, Message> = {
     animationHost,
     recordInputEvent: () => ++inputRevision,
+    getSnapshotInputRevision: () => snapshotInputRevision,
     acknowledgeCommittedSnapshot: node => acknowledgeCommittedSnapshot(node),
     maybeInstrumentation,
     getModel: () =>

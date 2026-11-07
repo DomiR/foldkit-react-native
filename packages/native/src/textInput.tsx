@@ -18,22 +18,24 @@ type InputState = typeof InputState.Type
 /** Orders native text reports and Model frames within one runtime. @internal */
 export const NativeInputContext = React.createContext<() => number>(() => 0)
 
+/** The edit revision of the frame being rendered. @internal */
+export const NativeInputRevisionContext = React.createContext(0)
+
 /** Retains native text until a Model frame includes that edit. A subsequent
  * Model value, including a clear, becomes authoritative. @internal */
 export const NativeTextInput = ({
   value,
   onChangeText,
   motion,
-  renderRevision,
   ...props
 }: Omit<React.ComponentProps<typeof TextInput>, 'value' | 'onChangeText'> &
   Readonly<{
     value: string | undefined
     onChangeText: ((value: string) => void) | undefined
     motion: NativeMotion | undefined
-    renderRevision: number
   }>): React.ReactElement => {
   const recordInputEvent = React.useContext(NativeInputContext)
+  const renderRevision = React.useContext(NativeInputRevisionContext)
   const [state, setState] = React.useState<InputState>(() =>
     InputState.make({
       modelValue: value,
