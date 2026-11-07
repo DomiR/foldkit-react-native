@@ -14,6 +14,7 @@ import type { RoutingConfig } from 'foldkit/runtime'
 import {
   type RuntimeCrashConfig,
   type RuntimeRenderer,
+  __bindBlockGraph,
   makeBlockRuntime,
   makeRuntimeCore,
 } from 'foldkit/runtime-core'
@@ -203,6 +204,7 @@ const makeProgram = <Model, Message>(
   )
   let inputRevision = 0
   const h = makeNativeBuilder<Message>()
+  let viewBuilder = h
   const id = config.id ?? 'main'
   const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
   const instrumentUpdate = <
@@ -263,7 +265,7 @@ const makeProgram = <Model, Message>(
     onNone:
       () =>
       (model: Model): void => {
-        const node = config.view(model, h)
+        const node = config.view(model, viewBuilder)
 
         if (isLiveViewRestorePending) {
           maybeRestoringSnapshot = Option.some(node)
@@ -275,7 +277,7 @@ const makeProgram = <Model, Message>(
       instrumentation =>
       (model: Model): void => {
         const startedAt = performance.now()
-        const node = config.view(model, h)
+        const node = config.view(model, viewBuilder)
         const endedAt = performance.now()
         instrumentation.onView(startedAt, endedAt)
 
@@ -489,7 +491,7 @@ const makeProgram = <Model, Message>(
               ).pipe(
                 Effect.flatMap(replayedModel =>
                   Effect.sync(() => {
-                    publish(config.view(replayedModel, h))
+                    publish(config.view(replayedModel, viewBuilder))
                     maybeLastDirtyMessage = Option.none()
                   }),
                 ),
@@ -577,6 +579,9 @@ const makeProgram = <Model, Message>(
           : false,
         renderer,
         host,
+        onComplete: block => {
+          viewBuilder = __bindBlockGraph(h, block)
+        },
       })
     : makePlainRuntime(config)
   const fiber = Effect.runFork(
