@@ -32,6 +32,7 @@ export const toCssProperties = (style: StrictStyle): Record<string, string> => {
     margin,
     marginHorizontal,
     marginVertical,
+    includeFontPadding: _includeFontPadding,
     ...properties
   } = style
   const expanded = {
