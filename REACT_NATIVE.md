@@ -1,5 +1,8 @@
 # React Native support
 
+> [!IMPORTANT]
+> Active development has moved to the [`blocks`](https://github.com/DomiR/foldkit-react-native/tree/blocks) branch. It carries this work on top of upstream's Blocks and Effect Layers pull request ([foldkit/foldkit#1655](https://github.com/foldkit/foldkit/pull/1655)), where applications are built from Blocks instead of Submodels. `main` keeps the earlier version for reference and receives no new work.
+
 ## Overview
 
 This fork adds experimental React Native support to Foldkit through a portable runtime core, a strict cross-host view contract, and a private `@foldkit/native` host for Expo applications.
