@@ -317,6 +317,11 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
      * alone. */
     TabIcon: (icon: StrictIcon) => Attribute
     OnDismissed: (toMessage: (dismissedCount: number) => Message) => Attribute
+    /** On a stack, `false` shows the back button as a chevron alone, without
+     * the previous screen's title. iOS uses its minimal back button and the
+     * web draws a chevron. Android shows no back title and ignores it.
+     * Default `true`. */
+    BackTitleVisible: (isVisible: boolean) => Attribute
     SelectedTab: (key: string) => Attribute
     OnSelectTab: (toMessage: (key: string) => Message) => Attribute
     /** On native tabs, `true` lets the tab bar switch as soon as the user taps

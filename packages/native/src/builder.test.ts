@@ -86,3 +86,18 @@ describe('ImmediateTabSelection', () => {
     })
   })
 })
+
+describe('BackTitleVisible', () => {
+  it('records a hidden back title on stacks', () => {
+    const h = makeNativeBuilder<string>()
+    const node = h.stack(
+      [h.BackTitleVisible(false)],
+      [h.screen('home', [], [])],
+    )
+
+    expect(node).toMatchObject({
+      _tag: 'Stack',
+      attributes: { isBackTitleVisible: false },
+    })
+  })
+})

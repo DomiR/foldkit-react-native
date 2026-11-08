@@ -475,3 +475,29 @@ describe('mapMessages', () => {
     ).not.toBe(mapMessages(strict, toParent))
   })
 })
+
+describe('BackTitleVisible', () => {
+  const twoScreenStack = (isBackTitleVisible: boolean) =>
+    strict.stack(
+      [
+        strict.OnDismissed(() => Message.Submitted()),
+        strict.BackTitleVisible(isBackTitleVisible),
+      ],
+      [
+        strict.screen('list', [strict.Title('List')], ['List']),
+        strict.screen('detail', [strict.Title('Detail')], ['Detail']),
+      ],
+    )
+
+  it('labels the back button Back by default', () => {
+    const container = render(() => twoScreenStack(true))
+    const back = container.querySelector('button[aria-label="Back"]')
+    expect(back?.textContent).toBe('Back')
+  })
+
+  it('draws a chevron alone when the back title is hidden', () => {
+    const container = render(() => twoScreenStack(false))
+    const back = container.querySelector('button[aria-label="Back"]')
+    expect(back?.textContent).toBe('‹')
+  })
+})
