@@ -1,7 +1,7 @@
 import { Array, Layer, Schema } from 'effect'
 import { Block } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
-import { type StrictView, embedBlock, embedKeyedBlock } from 'foldkit/strict'
+import type { StrictView } from 'foldkit/strict'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import type { NativeChild, NativeNode } from '../src/node'
@@ -50,7 +50,10 @@ const Model = Schema.Struct({
   primary: CounterBlock.Model,
   rows: Schema.Array(CounterBlock.Instance),
 })
-const Message = defineMessageUnion({ ClickedAddRow: {} })
+const Message = defineMessageUnion({
+  ClickedAddRow: {},
+  ClickedRemoveRow: { key: Schema.String },
+})
 
 const ApplicationKey = Symbol('Application')
 const ApplicationBlock = Block.make('Application', {
@@ -81,7 +84,14 @@ const layer = ApplicationBlock.makeLayer({
     model: { rows: [] },
     steps: [addRow, addRow],
   })),
-  update: ApplicationComposition.makeUpdate({ ClickedAddRow: addRow }),
+  update: ApplicationComposition.makeUpdate({
+    ClickedAddRow: addRow,
+    ClickedRemoveRow: ApplicationBlock.makeFieldsStep.fromMessage(
+      ({ key }) => ({
+        rows: Array.filter(row => row.key !== key),
+      }),
+    ),
+  }),
   view: ApplicationComposition.makeView((_model, h) => ({
     title: 'Parent',
     body: h.div([]),
@@ -95,9 +105,9 @@ const parentView: StrictView<ParentModel, ParentMessage> = (model, h) =>
   h.div(
     [],
     [
-      embedBlock(h, CounterBinding, model.primary, counterView),
+      h.block(CounterBinding, model.primary, counterView),
       ...Array.map(model.rows, row =>
-        embedKeyedBlock(h, RowsBinding, row.key, row.model, counterView),
+        h.block(RowsBinding, row.model, counterView, { key: row.key }),
       ),
     ],
   )
@@ -183,4 +193,34 @@ it('routes keyed child Messages to their own occurrence', async () => {
   await flush()
 
   expect(labels(program)).toEqual([['0'], ['0'], ['2']])
+})
+
+const onClickAt = (
+  program: NativeProgram<ParentModel, ParentMessage>,
+  index: number,
+): ParentMessage => {
+  const button = buttons(program.getSnapshot())[index]
+  if (button?._tag === 'Element' && button.attributes.onClick !== undefined) {
+    return button.attributes.onClick
+  }
+  throw new Error(`No button at ${index}`)
+}
+
+it('drops a Message from a replaced keyed occurrence', async () => {
+  const program = await startProgram()
+  const staleIncrement = onClickAt(program, 2)
+
+  program.dispatch(Message.ClickedRemoveRow({ key: 'row-1' }))
+  await flush()
+  program.dispatch(Message.ClickedAddRow())
+  await flush()
+  expect(labels(program)).toEqual([['0'], ['0'], ['0']])
+
+  program.dispatch(staleIncrement)
+  await flush()
+  expect(labels(program)).toEqual([['0'], ['0'], ['0']])
+
+  press(program, 2)
+  await flush()
+  expect(labels(program)).toEqual([['0'], ['0'], ['1']])
 })

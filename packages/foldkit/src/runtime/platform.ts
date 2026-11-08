@@ -50,6 +50,17 @@ export type RendererContext<Model, Message, HostState = void> = Readonly<{
   readLiveModel: () => Model
   messageQueue: MessageQueue<Message, unknown>
   devToolsIntegration: DevToolsIntegration<Model, Message>
+  /** Child Block occurrences of a runtime started from a Block graph. Hosts
+   * that render child Blocks themselves stamp each child Message envelope
+   * with `generationAt`, and pass view Messages through `admitViewMessage`,
+   * which returns `undefined` for a Message from a retired occurrence and
+   * otherwise the guard to enqueue it with. */
+  blockOccurrences: Readonly<{
+    generationAt: (
+      path: ReadonlyArray<Readonly<{ binding: object; key: unknown }>>,
+    ) => number | undefined
+    admitViewMessage: (message: Message) => (() => boolean) | undefined
+  }>
 }>
 
 /** Rendering operations used by the core. A crash must set `status.isCrashed`

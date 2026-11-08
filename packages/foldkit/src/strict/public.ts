@@ -16,7 +16,6 @@ export {
   Swipe,
 } from './index.js'
 export { mapMessages } from './index.js'
-export { embedBlock, embedKeyedBlock } from './index.js'
 export { createStrictLazy, createStrictKeyedLazy } from './index.js'
 export type { StrictLazyView } from './index.js'
 

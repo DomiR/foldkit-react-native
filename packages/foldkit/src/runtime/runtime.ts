@@ -26,6 +26,8 @@ import {
   aggregate as aggregateSubscriptions,
 } from '../subscription/subscription.js'
 import type { Return as UpdateReturn } from '../update/index.js'
+import type { Url } from '../url/index.js'
+import type { RoutingConfig } from './browserListeners.js'
 import type { CapturedInvocation } from './compositionRuntime.js'
 import {
   type CompositionRuntime,
@@ -41,8 +43,6 @@ import {
   validatePorts,
 } from './hostConnector.js'
 import type { ResolvedHydrationHandoff } from './hydrationHandoff.js'
-import type { Url } from '../url/index.js'
-import type { RoutingConfig } from './browserListeners.js'
 import { forkManagedResourceFibers } from './managedResourceFibers.js'
 import { type MessageQueue, makeMessageQueue } from './messageQueue.js'
 import type {
@@ -571,6 +571,13 @@ export const makeRuntime = <
           readLiveModel: () => liveModel,
           messageQueue,
           devToolsIntegration,
+          blockOccurrences: {
+            generationAt: path => composition?.generationAt(path),
+            admitViewMessage: message =>
+              composition === undefined
+                ? () => true
+                : composition.externalMessageGuard(message),
+          },
         })
 
         yield* Effect.addFinalizer(() => hostServices.releaseRendererResources)

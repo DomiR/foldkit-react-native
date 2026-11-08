@@ -74,6 +74,11 @@ export type CompositionRuntime<Model> = Readonly<{
   synchronize: (model: Model) => void
   capture: (command: object) => CapturedInvocation | undefined
   externalMessageGuard: (message: unknown) => (() => boolean) | undefined
+  /** The generation of the active occurrence at a Binding path, or
+   * `undefined` when an occurrence on the path is missing or retired. */
+  generationAt: (
+    path: ReadonlyArray<Readonly<{ binding: object; key: unknown }>>,
+  ) => number | undefined
   start: Effect.Effect<void>
 }>
 
@@ -601,6 +606,21 @@ export const makeCompositionRuntime = <Model, Message>({
       context: rootContext,
       synchronize: reconcile,
       externalMessageGuard: message => externalMessageGuard(root, message),
+      generationAt: path => {
+        let node: InstanceNode = root
+        for (const { binding, key } of path) {
+          const child = node.children
+            .get(binding)
+            // NOTE: occurrence keys are the decoded keys the Binding stores.
+            /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+            ?.get(key as InstanceKey | undefined)
+          if (child === undefined || !child.isActive) {
+            return undefined
+          }
+          node = child
+        }
+        return node.generation
+      },
       capture: command => {
         const nodes: Array<InstanceNode> = []
         let node = root

@@ -1,12 +1,5 @@
 import { Array, Option } from 'effect'
-import {
-  LongPress,
-  Pan,
-  type StrictView,
-  Swipe,
-  Tap,
-  embedBlock,
-} from 'foldkit/strict'
+import { LongPress, Pan, type StrictView, Swipe, Tap } from 'foldkit/strict'
 
 import { strictView as animationsView } from './animations/strictView'
 import { strictView as chatView } from './chat/strictView'
@@ -65,14 +58,13 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
   const routeView = (route: ShowcaseRoute) =>
     ShowcaseRoute.match(route, {
       Home: homeView,
-      Counter: () => embedBlock(h, CounterBinding, model.counter, counterView),
+      Counter: () => h.block(CounterBinding, model.counter, counterView),
       Stopwatch: () =>
-        embedBlock(h, StopwatchBinding, model.stopwatch, stopwatchView),
-      Todo: () => embedBlock(h, TodoBinding, model.todo, todoView),
-      Form: () => embedBlock(h, FormBinding, model.form, formView),
-      Contacts: () =>
-        embedBlock(h, ContactsBinding, model.contacts, contactsView),
-      Chat: () => embedBlock(h, ChatBinding, model.chat, chatView),
+        h.block(StopwatchBinding, model.stopwatch, stopwatchView),
+      Todo: () => h.block(TodoBinding, model.todo, todoView),
+      Form: () => h.block(FormBinding, model.form, formView),
+      Contacts: () => h.block(ContactsBinding, model.contacts, contactsView),
+      Chat: () => h.block(ChatBinding, model.chat, chatView),
     })
   const titleForRoute = (route: ShowcaseRoute): string =>
     ShowcaseRoute.match(route, {
@@ -244,14 +236,7 @@ export const showcaseStrictView: StrictView<Model, Message> = (model, h) => {
               h.screen(
                 'Animations',
                 [h.Title('Animations')],
-                [
-                  embedBlock(
-                    h,
-                    AnimationsBinding,
-                    model.animations,
-                    animationsView,
-                  ),
-                ],
+                [h.block(AnimationsBinding, model.animations, animationsView)],
               ),
             ],
           ),

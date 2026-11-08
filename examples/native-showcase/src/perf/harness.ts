@@ -1,20 +1,60 @@
-import { Option, Predicate } from 'effect'
-import { Message as CounterMessage } from 'strict-showcase-example/counter/block'
+import { Array, Option, Predicate } from 'effect'
 import * as Showcase from 'strict-showcase-example/showcase'
 
-import type { NativeInstrumentation, NativeProgram } from '@foldkit/native'
+import type {
+  NativeChild,
+  NativeInstrumentation,
+  NativeProgram,
+} from '@foldkit/native'
 
 declare const performance: Readonly<{ now: () => number }>
 
-// NOTE: the perf harness dispatches straight into the program, so it builds
-// the counter Binding's child Message envelope itself.
-/* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
-const clickedCounterIncrement = {
-  _tag: 'GotCounterMessage',
-  placement: 'counter',
-  generation: 0,
-  message: CounterMessage.ClickedIncrement(),
-} as unknown as Showcase.Message
+const findIncrement = (
+  child: NativeChild<Showcase.Message>,
+): Option.Option<Showcase.Message> => {
+  if (child === null || Predicate.isString(child)) {
+    return Option.none()
+  }
+
+  if (child._tag === 'Lazy') {
+    return findIncrement(child.node)
+  }
+
+  if (child._tag === 'Stack') {
+    return Array.findFirst(child.screens, screen =>
+      Array.findFirst(screen.children, findIncrement),
+    )
+  }
+
+  if (child._tag === 'Tabs') {
+    return Array.findFirst(child.tabs, tab =>
+      Array.findFirst(tab.children, findIncrement),
+    )
+  }
+
+  if (child._tag !== 'Element') {
+    return Option.none()
+  }
+
+  if (
+    child.attributes.ariaLabel === 'Increment' &&
+    child.attributes.onClick !== undefined
+  ) {
+    return Option.some(child.attributes.onClick)
+  }
+
+  return Array.findFirst(child.children, findIncrement)
+}
+
+// NOTE: the harness presses the rendered Increment button's Message, which
+// carries the live counter occurrence's generation.
+const clickedCounterIncrement = (
+  program: NativeProgram<Showcase.Model, Showcase.Message>,
+): Showcase.Message =>
+  Option.getOrThrowWith(
+    findIncrement(program.getSnapshot()),
+    () => new Error('The Counter screen is not rendered.'),
+  )
 
 const DECIMAL_PLACES = 3
 const ROUNDING_FACTOR = 10 ** DECIMAL_PLACES
@@ -383,7 +423,7 @@ export const makePerfHarness = (
     })
 
     try {
-      program.dispatch(clickedCounterIncrement)
+      program.dispatch(clickedCounterIncrement(program))
     } catch (error) {
       maybeLatencySample = Option.none()
       throw error
@@ -431,7 +471,7 @@ export const makePerfHarness = (
       maybeBurst = Option.some(burst)
 
       for (let dispatchIndex = 0; dispatchIndex < size; dispatchIndex += 1) {
-        program.dispatch(clickedCounterIncrement)
+        program.dispatch(clickedCounterIncrement(program))
       }
 
       burst.dispatchLoopMs = performance.now() - startedAt

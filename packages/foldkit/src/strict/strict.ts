@@ -353,6 +353,18 @@ export type StrictHtmlBuilder<Message, Node, Attribute> = Readonly<
       view: (...args: Args) => Node,
       args: Args,
     ) => Node
+    /** Renders a child Block's strict view at this position, like `h.block`
+     * in a web view. Pass the child's Binding, its Model, and its strict view.
+     * A keyed Binding, such as one row of a keyed array, also takes the
+     * occurrence key. Messages from the child view reach the child Block
+     * through its Binding; a Message from a replaced child view is dropped.
+     * Only Block program views can render child Blocks. @experimental */
+    block: <ChildModel, ChildMessage>(
+      binding: object,
+      model: ChildModel,
+      view: StrictView<ChildModel, ChildMessage>,
+      options?: Readonly<{ key: unknown }>,
+    ) => Node
     Style: (style: StrictStyle) => Attribute
     OnClick: (message: Message) => Attribute
     /** Records that the user scrolled near the end of a list. It may fire more

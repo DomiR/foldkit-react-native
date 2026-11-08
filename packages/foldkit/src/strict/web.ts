@@ -7,10 +7,6 @@ import type {
   AnimatedStyleBinding,
   StrictLayoutAnimation,
 } from './animation.js'
-import {
-  type HostBlockEmbedding,
-  HostBlockEmbeddingTypeId,
-} from './embedBlock.js'
 import type { StrictGesture } from './gesture.js'
 import type { StrictIcon } from './icon.js'
 import type {
@@ -280,6 +276,51 @@ export const toStrictHtml = <Message>(
     ) =>
       buildElement(tag, attributes, children)
 
+  const childViews = new WeakMap<
+    StrictView<any, any>,
+    (model: unknown, childH: HtmlBuilder<unknown>) => Html
+  >()
+  const childViewFor = (view: StrictView<any, any>) => {
+    const cached = childViews.get(view)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const childView = (model: unknown, childH: HtmlBuilder<unknown>): Html =>
+      view(model, toStrictHtml(childH, animationHost))
+    childViews.set(view, childView)
+    return childView
+  }
+  const renderBlock = (
+    binding: object,
+    model: unknown,
+    view: StrictView<any, any>,
+    options: Readonly<{ key: unknown }> | undefined,
+  ): Html => {
+    const embedView = Reflect.get(binding, 'embedView')
+    const block = Reflect.get(h, 'block')
+    if (!Predicate.isFunction(embedView) || !Predicate.isFunction(block)) {
+      throw new Error(
+        '[foldkit] h.block in a strict view requires a Block view builder and a child Binding.',
+      )
+    }
+
+    const slotId =
+      options === undefined
+        ? globalThis.String(Reflect.get(binding, 'placement'))
+        : globalThis.String(options.key)
+    const embedding = Reflect.apply(embedView, binding, [
+      {
+        ...options,
+        slotId,
+        model,
+        view: childViewFor(view),
+      },
+    ])
+    // NOTE: h.block returns the child's rendered Html.
+    /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+    return Reflect.apply(block, h, [embedding]) as Html
+  }
   const builder: StrictHtmlBuilder<Message, Html, Attribute<Message>> = {
     div: element('div'),
     span: element('span'),
@@ -467,6 +508,8 @@ export const toStrictHtml = <Message>(
     Gesture: gesture => navigationAttribute({ gestures: [gesture] }),
     empty: h.empty,
     lazy: resolveWebLazy,
+    block: (binding, model, view, options) =>
+      renderBlock(binding, model, view, options),
     Style: style => {
       const attribute = h.Style(toCssProperties(style))
       styleValues.set(attribute, style)
@@ -491,54 +534,6 @@ export const toStrictHtml = <Message>(
     Disabled: h.Disabled,
     Checked: h.Checked,
   }
-
-  const childViews = new WeakMap<
-    StrictView<any, any>,
-    (model: unknown, childH: HtmlBuilder<unknown>) => Html
-  >()
-  const childViewFor = (view: StrictView<any, any>) => {
-    const cached = childViews.get(view)
-    if (cached !== undefined) {
-      return cached
-    }
-
-    const childView = (model: unknown, childH: HtmlBuilder<unknown>): Html =>
-      view(model, toStrictHtml(childH, animationHost))
-    childViews.set(view, childView)
-    return childView
-  }
-  const embedBlockThroughHtml: HostBlockEmbedding = (
-    binding,
-    maybeKey,
-    model,
-    view,
-  ) => {
-    const embedView = Reflect.get(binding, 'embedView')
-    const block = Reflect.get(h, 'block')
-    if (!Predicate.isFunction(embedView) || !Predicate.isFunction(block)) {
-      throw new Error(
-        '[foldkit] embedBlock on the web requires a Block view builder and a child Binding.',
-      )
-    }
-
-    const slotId =
-      maybeKey === undefined
-        ? globalThis.String(Reflect.get(binding, 'placement'))
-        : globalThis.String(maybeKey.key)
-    const embedding = Reflect.apply(embedView, binding, [
-      {
-        ...maybeKey,
-        slotId,
-        model,
-        view: childViewFor(view),
-      },
-    ])
-    return Reflect.apply(block, h, [embedding])
-  }
-  Object.defineProperty(builder, HostBlockEmbeddingTypeId, {
-    value: embedBlockThroughHtml,
-    enumerable: true,
-  })
 
   return builder
 }

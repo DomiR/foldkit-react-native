@@ -14,7 +14,8 @@ import type { RoutingConfig } from 'foldkit/runtime'
 import {
   type RuntimeCrashConfig,
   type RuntimeRenderer,
-  __bindBlockGraph,
+  type BlockScopes,
+  makeBlockScopes,
   makeBlockRuntime,
   makeRuntimeCore,
 } from 'foldkit/runtime-core'
@@ -203,8 +204,15 @@ const makeProgram = <Model, Message>(
     Schema.declare<Model>((_value): _value is Model => true),
   )
   let inputRevision = 0
-  const h = makeNativeBuilder<Message>()
-  let viewBuilder = h
+  let maybeBlockScopes: BlockScopes | undefined
+  let readGeneration = (
+    _path: ReadonlyArray<Readonly<{ binding: object; key: unknown }>>,
+  ): number | undefined => undefined
+  let admitViewMessage =
+    (_message: Message): (() => boolean) | undefined =>
+    () =>
+      true
+  const h = makeNativeBuilder<Message>(() => maybeBlockScopes)
   const id = config.id ?? 'main'
   const maybeInstrumentation = Option.fromNullishOr(config.instrumentation)
   const instrumentUpdate = <
@@ -240,7 +248,10 @@ const makeProgram = <Model, Message>(
   let snapshot = h.div([])
   let snapshotInputRevision = 0
   let maybeReadLiveModel = Option.none<() => Model>()
-  let enqueueMessage = (_message: Message): void => {}
+  let enqueueMessage = (
+    _message: Message,
+    _isCurrent?: () => boolean,
+  ): void => {}
   let isDisposed = false
   let isInteractionPaused = (): boolean => false
   let isLiveViewRestorePending = false
@@ -265,7 +276,7 @@ const makeProgram = <Model, Message>(
     onNone:
       () =>
       (model: Model): void => {
-        const node = config.view(model, viewBuilder)
+        const node = config.view(model, h)
 
         if (isLiveViewRestorePending) {
           maybeRestoringSnapshot = Option.some(node)
@@ -277,7 +288,7 @@ const makeProgram = <Model, Message>(
       instrumentation =>
       (model: Model): void => {
         const startedAt = performance.now()
-        const node = config.view(model, viewBuilder)
+        const node = config.view(model, h)
         const endedAt = performance.now()
         instrumentation.onView(startedAt, endedAt)
 
@@ -297,6 +308,8 @@ const makeProgram = <Model, Message>(
       isInteractionPaused = () => isPausedNow() || readViewState() === 'Paused'
       maybeReadLiveModel = Option.some(readLiveModel)
       enqueueMessage = messageQueue.enqueueMessage
+      readGeneration = context.blockOccurrences.generationAt
+      admitViewMessage = context.blockOccurrences.admitViewMessage
       let maybeFrame = Option.none<number>()
       let maybeLastDirtyMessage = Option.none<Message>()
 
@@ -491,7 +504,7 @@ const makeProgram = <Model, Message>(
               ).pipe(
                 Effect.flatMap(replayedModel =>
                   Effect.sync(() => {
-                    publish(config.view(replayedModel, viewBuilder))
+                    publish(config.view(replayedModel, h))
                     maybeLastDirtyMessage = Option.none()
                   }),
                 ),
@@ -580,7 +593,9 @@ const makeProgram = <Model, Message>(
         renderer,
         host,
         onComplete: block => {
-          viewBuilder = __bindBlockGraph(h, block)
+          maybeBlockScopes = makeBlockScopes(block, path =>
+            readGeneration(path),
+          )
         },
       })
     : makePlainRuntime(config)
@@ -627,7 +642,10 @@ const makeProgram = <Model, Message>(
     },
     dispatch: message => {
       if (!isDisposed && !isInteractionPaused()) {
-        enqueueMessage(message)
+        const maybeIsCurrent = admitViewMessage(message)
+        if (maybeIsCurrent !== undefined) {
+          enqueueMessage(message, maybeIsCurrent)
+        }
       }
     },
     render: getSnapshot,
